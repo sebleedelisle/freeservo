@@ -31,7 +31,7 @@ void setup() {
 
   
   
-  TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
+  TCCR3B &= (0xff & 0x2); // change pwm frequency to 40k or something
   
   position = targetPosition = motorPower = 0;
 
