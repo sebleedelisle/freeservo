@@ -22,7 +22,7 @@ void setup() {
   
   knobKp = cp5.addKnob("Kp")
                .setRange(0.001,5)
-               .setValue(0.5)
+               .setValue(0.88)
                .setPosition(20,20)
                .setRadius(50)
                .setDragDirection(Knob.VERTICAL)
@@ -30,7 +30,7 @@ void setup() {
   
   knobKi = cp5.addKnob("Ki")
                .setRange(0,1)
-               .setValue(0.2)
+               .setValue(0.16)
                .setPosition(120,20)
                .setRadius(50)
                .setDragDirection(Knob.VERTICAL)
@@ -38,7 +38,7 @@ void setup() {
                
    knobKd = cp5.addKnob("Kd")
                .setRange(0,1)
-               .setValue(0)
+               .setValue(0.9)
                .setPosition(220,20)
                .setRadius(50)
                .setDragDirection(Knob.VERTICAL)
@@ -97,7 +97,7 @@ void keyPressed() {
 void ResendValues(){
   String v1 = String.format("%e",knobKp.getValue());
   String v2 = String.format("%e",knobKi.getValue());
-  String v3 = String.format("%e",knobKd.getValue()/1000);
+  String v3 = String.format("%e",knobKd.getValue()/100);
   String msg = v1 +","+ v2 +","+ v3 + "\n";  
   print( msg );
   if( serial != null ){

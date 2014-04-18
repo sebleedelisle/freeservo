@@ -18,7 +18,7 @@ long counter = 0;
 String command = "";
 boolean commandComplete = false;
 
-double Kp=5, Ki=10, Kd=0.1;
+double Kp=0.88, Ki=0.16, Kd=0.009;
 
 //PID myPID(&position, &motorPower, &targetPosition,0.02,0.4,0.02,DIRECT);
 PID myPID(&position, &motorPower, &targetPosition,5,10,0.1,DIRECT);
@@ -31,7 +31,7 @@ void setup() {
 
   
   
-  TCCR3B &= (0xff & 0x2); // change pwm frequency to 40k or something
+  TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
   
   position = targetPosition = motorPower = 0;
 
@@ -57,7 +57,8 @@ void setup() {
  myPID.SetOutputLimits(-205,205); 
  myPID.SetMode(AUTOMATIC);
  myPID.SetSampleTime(5);
- 
+ myPID.SetTunings(Kp,Ki,Kd);
+  
   
 }
 
@@ -70,30 +71,30 @@ void loop() {
   analogWrite(pwmPin, abs(round(motorPower))); 
   digitalWrite(dirPin, motorPower<0 ? HIGH : LOW);  
   
+  targetPosition = round(sin(millis()*0.001f) * 2000.0f);
+  
   if( commandComplete ){
-    char commandStr[command.length()];
+    char commandStr[command.length()+1];
     char *ptr;
     
-    command.toCharArray( commandStr, command.length() );
+    command.toCharArray( commandStr, command.length()+1 );
     
     Kp=strtod(commandStr, &ptr);
     ptr++;
     Ki=strtod(ptr, &ptr);
     ptr++;
-    Serial.println( ptr );
-
     Kd=strtod(ptr, &ptr);
     
     myPID.SetTunings(Kp,Ki,Kd);
   
-  
+    
     Serial.print( Kp );
     Serial.print( "," );
     Serial.print( Ki );
     Serial.print( "," );
     Serial.println( Kd );
   
-    targetPosition = random(0,8000);
+    //targetPosition = random(0,8000);
     
     commandComplete = false;
     command = "";
