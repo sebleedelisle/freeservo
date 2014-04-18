@@ -25,8 +25,10 @@ PID myPID(&position, &motorPower, &targetPosition,5,10,0.1,DIRECT);
 
 
 void setup() { 
-  
+  targetPosition = 10000;
   command.reserve(256);
+  Serial.begin(9600); 
+
   
   
   TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
@@ -56,27 +58,25 @@ void setup() {
  myPID.SetMode(AUTOMATIC);
  myPID.SetSampleTime(1);
  
-  Serial.begin(38400); 
+  
+  
 }
 
 
 void loop() { 
 
 
-  //myPID.Compute();
-  myPID.SetTunings(Kp,Ki,Kd);
-
-  targetPosition = round(sin(millis()*0.001f) * 10000.0f); 
-
+  myPID.Compute();
+  
   // motorPower automatically updated by the PID algo
   analogWrite(pwmPin, abs(round(motorPower))); 
   digitalWrite(dirPin, motorPower<0 ? HIGH : LOW);  
-
+  
   if( commandComplete ){
-    char commandStr[38];
+    char commandStr[command.length()];
     char *ptr;
     
-    command.toCharArray( commandStr, 38 );
+    command.toCharArray( commandStr, command.length() );
     
     Kp=strtod(commandStr, &ptr);
     ptr++;
@@ -84,6 +84,14 @@ void loop() {
     ptr++;
     Kd=strtod(commandStr, &ptr);
     
+    myPID.SetTunings(Kp,Ki,Kd);
+  
+    targetPosition = random(-4000,4000);
+    
+    commandComplete = false;
+    command = "";
+   
+
   }
   
 }
@@ -137,7 +145,7 @@ void bChange() {
 }
 
 void serialEvent() {
-  while (Serial.available()) {
+  if (Serial.available()) {
     // get the new byte:
     char inChar = (char)Serial.read(); 
     // add it to the inputString:

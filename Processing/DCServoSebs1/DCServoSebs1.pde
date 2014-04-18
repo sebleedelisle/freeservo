@@ -20,17 +20,17 @@ void setup() {
   
   cp5 = new ControlP5(this);
   
-  knobKp = cp5.addKnob("Ki")
-               .setRange(0,5)
-               .setValue(1)
+  knobKp = cp5.addKnob("Kp")
+               .setRange(0.001,0.05)
+               .setValue(0.05)
                .setPosition(20,20)
                .setRadius(50)
                .setDragDirection(Knob.VERTICAL)
                ;
   
-  knobKi = cp5.addKnob("Kp")
-               .setRange(0,5)
-               .setValue(0)
+  knobKi = cp5.addKnob("Ki")
+               .setRange(0,100)
+               .setValue(10)
                .setPosition(120,20)
                .setRadius(50)
                .setDragDirection(Knob.VERTICAL)
@@ -38,12 +38,11 @@ void setup() {
                
    knobKd = cp5.addKnob("Kd")
                .setRange(0,5)
-               .setValue(0)
+               .setValue(0.1)
                .setPosition(220,20)
                .setRadius(50)
                .setDragDirection(Knob.VERTICAL)
                ;
-               
   
   DropdownList l = cp5.addDropdownList("Select port",400,20,200,200).setId(0);
   String[] serialPorts = Serial.list();      
@@ -74,7 +73,7 @@ void controlEvent(ControlEvent theEvent) {
         serial.clear();
         serial.stop();
       }
-      serial = new Serial(this, Serial.list()[value], 28800);
+      serial = new Serial(this, Serial.list()[value], 9600);
     }
     catch(Exception e){
       
@@ -84,25 +83,30 @@ void controlEvent(ControlEvent theEvent) {
   else {
      if( (knobKp == null) || (knobKi == null) || (knobKd == null) ) return; 
   
-      String v1 = String.format("%2e",knobKp.getValue());
-      String v2 = String.format("%2e",knobKi.getValue());
-      String v3 = String.format("%2e",knobKd.getValue());
-      String msg = v1 +","+ v2 +","+ v3 + "\n";  
-      println( msg );
-      if( serial != null ){
-        try{
-          serial.write( msg.getBytes() );
-        }
-        catch(Exception e){
+        ResendValues();
           
-        }
-          
-      }
+      
 
   }
 }
 
 void keyPressed() {
+    ResendValues();
   
-  
+}
+
+void ResendValues(){
+  String v1 = String.format("%2e",knobKp.getValue());
+  String v2 = String.format("%2e",knobKi.getValue());
+  String v3 = String.format("%2e",knobKd.getValue());
+  String msg = v1 +","+ v2 +","+ v3 + "\n";  
+  print( msg );
+  if( serial != null ){
+    try{
+      serial.write( msg.getBytes() );
+    }
+    catch(Exception e){
+      
+    }
+  }
 }
