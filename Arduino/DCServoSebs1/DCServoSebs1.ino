@@ -20,7 +20,7 @@ PID myPID(&position, &motorPower, &targetPosition,5,10,0.1,DIRECT);
 
 void setup() { 
   
-  TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
+  TCCR3B &= (0xff & 0x2); // change pwm frequency to 40k or something
   
   position = targetPosition = motorPower = 0;   
 
