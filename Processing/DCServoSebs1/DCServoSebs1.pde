@@ -21,24 +21,24 @@ void setup() {
   cp5 = new ControlP5(this);
   
   knobKp = cp5.addKnob("Kp")
-               .setRange(0.001,0.05)
-               .setValue(0.05)
+               .setRange(0.001,5)
+               .setValue(0.5)
                .setPosition(20,20)
                .setRadius(50)
                .setDragDirection(Knob.VERTICAL)
                ;
   
   knobKi = cp5.addKnob("Ki")
-               .setRange(0,100)
-               .setValue(10)
+               .setRange(0,1)
+               .setValue(0.2)
                .setPosition(120,20)
                .setRadius(50)
                .setDragDirection(Knob.VERTICAL)
                ;
                
    knobKd = cp5.addKnob("Kd")
-               .setRange(0,5)
-               .setValue(0.1)
+               .setRange(0,1)
+               .setValue(0)
                .setPosition(220,20)
                .setRadius(50)
                .setDragDirection(Knob.VERTICAL)
@@ -65,7 +65,6 @@ void draw() {
 void controlEvent(ControlEvent theEvent) {
   if (theEvent.isGroup()) {
     int value = (int)theEvent.getGroup().getValue();
-    print(value);
     
     
     try{
@@ -96,9 +95,9 @@ void keyPressed() {
 }
 
 void ResendValues(){
-  String v1 = String.format("%2e",knobKp.getValue());
-  String v2 = String.format("%2e",knobKi.getValue());
-  String v3 = String.format("%2e",knobKd.getValue());
+  String v1 = String.format("%e",knobKp.getValue());
+  String v2 = String.format("%e",knobKi.getValue());
+  String v3 = String.format("%e",knobKd.getValue()/1000);
   String msg = v1 +","+ v2 +","+ v3 + "\n";  
   print( msg );
   if( serial != null ){

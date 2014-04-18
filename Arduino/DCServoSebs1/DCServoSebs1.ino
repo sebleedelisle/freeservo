@@ -52,19 +52,17 @@ void setup() {
   pinMode(dirPin, OUTPUT); 
   pinMode(pwmPin, OUTPUT); 
   digitalWrite(pwmPin, 0); 
-  digitalWrite(dirPin, 0); 
+  digitalWrite(dirPin, 0);
 
- myPID.SetOutputLimits(-255,255); 
+ myPID.SetOutputLimits(-205,205); 
  myPID.SetMode(AUTOMATIC);
- myPID.SetSampleTime(1);
+ myPID.SetSampleTime(5);
  
-  
   
 }
 
 
 void loop() { 
-
 
   myPID.Compute();
   
@@ -80,13 +78,22 @@ void loop() {
     
     Kp=strtod(commandStr, &ptr);
     ptr++;
-    Ki=strtod(commandStr, &ptr);
+    Ki=strtod(ptr, &ptr);
     ptr++;
-    Kd=strtod(commandStr, &ptr);
+    Serial.println( ptr );
+
+    Kd=strtod(ptr, &ptr);
     
     myPID.SetTunings(Kp,Ki,Kd);
   
-    targetPosition = random(-4000,4000);
+  
+    Serial.print( Kp );
+    Serial.print( "," );
+    Serial.print( Ki );
+    Serial.print( "," );
+    Serial.println( Kd );
+  
+    targetPosition = random(0,8000);
     
     commandComplete = false;
     command = "";
