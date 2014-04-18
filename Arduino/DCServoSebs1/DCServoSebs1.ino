@@ -73,10 +73,17 @@ void loop() {
   digitalWrite(dirPin, motorPower<0 ? HIGH : LOW);  
 
   if( commandComplete ){
-    char commandStr[256];
+    char commandStr[38];
+    char *ptr;
     
-    command.toCharArray( commandStr, 256 );
-    //dtostrf(FLOAT,WIDTH,PRECSISION,BUFFER);
+    command.toCharArray( commandStr, 38 );
+    
+    Kp=strtod(commandStr, &ptr);
+    ptr++;
+    Ki=strtod(commandStr, &ptr);
+    ptr++;
+    Kd=strtod(commandStr, &ptr);
+    
   }
   
 }
