@@ -22,7 +22,6 @@ boolean commandComplete = false;
 
 double Kp = 0.88, Ki = 0.16, Kd = 0.009;
 
-//PID myPID(&position, &motorPower, &targetPosition,0.02,0.4,0.02,DIRECT);
 PID myPID(&position, &motorPower, &targetPosition, Kp, Ki, Kd, DIRECT);
 
 
@@ -32,6 +31,7 @@ void setup() {
   Serial.begin(9600);
 
   TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
+  TCCR4B &= (0xff & 0x1); // change pwm frequency to 40k or something
 
   position = targetPosition = motorPower = 0;
 
