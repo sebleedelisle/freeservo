@@ -17,7 +17,7 @@ const int bPin = 21; // interrupt 2 Port PD0
 #define bPortPin PD0 
 
 
-volatile boolean aState, bState;
+volatile unsigned int aState, bState;
 
 volatile double position, targetPosition, motorPower;
 
@@ -120,46 +120,50 @@ void checkSerial() {
 
 void aChange() {
 
-  //aState = PINC & (0b100) ;//(PINC & B100 > 0);//
-  //aState = digitalRead(aPin);
   aState = (aPort & (1<<aPortPin)) >> aPortPin; 
-  if (aState == HIGH) {
-    // rising
-    if (bState == LOW)
-      position++;
-    else
-      position--;
-  }
-  else {
-    // falling
-    if (bState == HIGH)
-      position++;
-    else
-      position --;
 
-  }
+  // oooooo XOR!
+  (bState^aState) ? position++ : position--;
+
+
+//  if (aState == HIGH) {
+//    // rising
+//    if (bState == LOW)
+//      position++;
+//    else
+//      position--;
+//  }
+//  else {
+//    // falling
+//    if (bState == HIGH)
+//      position++;
+//    else
+//      position --;
+//
+//  }
 
 }
 
 void bChange() {
 
    bState = (bPort & (1<<bPortPin)) >> bPortPin; 
-
-  if (bState == HIGH) {
-    // rising
-    if (aState == HIGH)
-      position++;
-    else
-      position--;
-  }
-  else {
-    // falling
-    if (aState == LOW)
-      position++;
-    else
-      position --;
-
-  }
+   bState^aState ? position-- : position++;
+   
+//  if (bState == HIGH) {
+//    // rising
+//    if (aState == HIGH)
+//      position++;
+//    else
+//      position--;
+//  }
+//  else {
+//    // falling
+//    if (aState == LOW)
+//      position++;
+//    else
+//      position --;
+//
+//  }
 
 }
 
