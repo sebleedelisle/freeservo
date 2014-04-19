@@ -11,20 +11,22 @@
 const int aPin = 20; // interrupt 3 Port PD1 (vars not actually used any more)
 const int bPin = 21; // interrupt 2 Port PD0
 
-#define aPort PIND 
-#define aPortPin PD1 
-#define bPort PIND 
-#define bPortPin PD0 
+const int errorLightPin = 13; 
+
+#define aPort PIND
+#define aPortPin PD1
+#define bPort PIND
+#define bPortPin PD0
 
 
 volatile unsigned int aState, bState;
 
 volatile double position, targetPosition, motorPower;
 
-int errorMargin = 256; // the number of ticks out of place before the servo goes
-                       // into error.
-                       
-bool servoError = false; 
+int errorMargin = 1000; // the number of ticks out of place before the servo goes
+// into error.
+
+bool servoError = false;
 
 long counter = 0;
 
@@ -54,11 +56,12 @@ void setup() {
 
   pinMode(aPin, INPUT);
   pinMode(bPin, INPUT);
+  pinMode(errorLightPin, OUTPUT); 
 
   aState = digitalRead(aPin);
   bState = digitalRead(bPin);
 
- // initMotorPins(); 
+  // initMotorPins();
 
   myPID.SetOutputLimits(-205, 205);
   myPID.SetMode(AUTOMATIC);
@@ -73,21 +76,28 @@ void loop() {
 
   myPID.Compute();
 
-  if(!servoError) setMotorPower(motorPower);
-  else setMotorPower(0); 
-  
-  targetPosition = round(sin(millis() * 0.001f) * 10000.0f);
-  
-  if(abs(position-targetPosition)>errorMargin) servoError = true; 
-  
-  checkSerial(); 
-  
-  
+  if (!servoError) setMotorPower(motorPower);
+  else setMotorPower(0);
+
+  targetPosition = round((cos(millis() * 0.001f)-1) * 40000.0f);
+
+  if (abs(position - targetPosition) > errorMargin) servoError = true;
+
+  if ((servoError && ((millis() % 500) < 250)) || (abs(targetPosition - position)>256)) {
+    digitalWrite(errorLightPin, HIGH);
+  } else {
+    digitalWrite(errorLightPin, LOW);
+  }
+
+
+  checkSerial();
+
+
 
 }
 
-void checkSerial() { 
-  
+void checkSerial() {
+
   if ( commandComplete ) {
     char commandStr[command.length() + 1];
     char *ptr;
@@ -120,50 +130,50 @@ void checkSerial() {
 
 void aChange() {
 
-  aState = (aPort & (1<<aPortPin)) >> aPortPin; 
+  aState = (aPort & (1 << aPortPin)) >> aPortPin;
 
   // oooooo XOR!
-  (bState^aState) ? position++ : position--;
+  (bState ^ aState) ? position++ : position--;
 
 
-//  if (aState == HIGH) {
-//    // rising
-//    if (bState == LOW)
-//      position++;
-//    else
-//      position--;
-//  }
-//  else {
-//    // falling
-//    if (bState == HIGH)
-//      position++;
-//    else
-//      position --;
-//
-//  }
+  //  if (aState == HIGH) {
+  //    // rising
+  //    if (bState == LOW)
+  //      position++;
+  //    else
+  //      position--;
+  //  }
+  //  else {
+  //    // falling
+  //    if (bState == HIGH)
+  //      position++;
+  //    else
+  //      position --;
+  //
+  //  }
 
 }
 
 void bChange() {
 
-   bState = (bPort & (1<<bPortPin)) >> bPortPin; 
-   bState^aState ? position-- : position++;
-   
-//  if (bState == HIGH) {
-//    // rising
-//    if (aState == HIGH)
-//      position++;
-//    else
-//      position--;
-//  }
-//  else {
-//    // falling
-//    if (aState == LOW)
-//      position++;
-//    else
-//      position --;
-//
-//  }
+  bState = (bPort & (1 << bPortPin)) >> bPortPin;
+  bState^aState ? position-- : position++;
+
+  //  if (bState == HIGH) {
+  //    // rising
+  //    if (aState == HIGH)
+  //      position++;
+  //    else
+  //      position--;
+  //  }
+  //  else {
+  //    // falling
+  //    if (aState == LOW)
+  //      position++;
+  //    else
+  //      position --;
+  //
+  //  }
 
 }
 
