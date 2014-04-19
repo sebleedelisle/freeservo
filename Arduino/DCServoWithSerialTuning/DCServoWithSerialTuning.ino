@@ -8,19 +8,30 @@
 #include "MotorDrives.h"
 
 // encoder pins
-const int aPin = 20; // interrupt 3
-const int bPin = 21; // interrupt 2
+const int aPin = 20; // interrupt 3 Port PD1 (vars not actually used any more)
+const int bPin = 21; // interrupt 2 Port PD0
+
+#define aPort PIND 
+#define aPortPin PD1 
+#define bPort PIND 
+#define bPortPin PD0 
+
 
 volatile boolean aState, bState;
 
 volatile double position, targetPosition, motorPower;
+
+int errorMargin = 256; // the number of ticks out of place before the servo goes
+                       // into error.
+                       
+bool servoError = false; 
 
 long counter = 0;
 
 String command = "";
 boolean commandComplete = false;
 
-double Kp = 0.88, Ki = 0.16, Kd = 0.009;
+double Kp = 0.44, Ki = 0.06, Kd = 0.0019;
 
 PID myPID(&position, &motorPower, &targetPosition, Kp, Ki, Kd, DIRECT);
 
@@ -30,8 +41,8 @@ void setup() {
   command.reserve(256);
   Serial.begin(9600);
 
-  TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
-  TCCR4B &= (0xff & 0x1); // change pwm frequency to 40k or something
+  //TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
+  //TCCR4B &= (0xff & 0x1); // change pwm frequency to 40k or something
 
   position = targetPosition = motorPower = 0;
 
@@ -62,9 +73,12 @@ void loop() {
 
   myPID.Compute();
 
-  setMotorPower(motorPower);
-
-  targetPosition = round(sin(millis() * 0.001f) * 2000.0f);
+  if(!servoError) setMotorPower(motorPower);
+  else setMotorPower(0); 
+  
+  targetPosition = round(sin(millis() * 0.001f) * 10000.0f);
+  
+  if(abs(position-targetPosition)>errorMargin) servoError = true; 
   
   checkSerial(); 
   
@@ -107,7 +121,8 @@ void checkSerial() {
 void aChange() {
 
   //aState = PINC & (0b100) ;//(PINC & B100 > 0);//
-  aState = digitalRead(aPin);
+  //aState = digitalRead(aPin);
+  aState = (aPort & (1<<aPortPin)) >> aPortPin; 
   if (aState == HIGH) {
     // rising
     if (bState == LOW)
@@ -128,9 +143,7 @@ void aChange() {
 
 void bChange() {
 
-
-  bState = digitalRead(bPin);
-
+   bState = (bPort & (1<<bPortPin)) >> bPortPin; 
 
   if (bState == HIGH) {
     // rising
