@@ -5,21 +5,24 @@
 //const int pwmPin = 3;
 
 // Paul's motor shield
-const int pwm0 = 2; // 0 and 3 make it go forward
-const int pwm1 = 3; // 1 and 2 make it go backward
-const int pwm2 = 4;
-const int pwm3 = 5; //
-
+const int pwm0 = 5; // 0 and 3 make it go forward
+const int pwm1 = 6; // 1 and 2 make it go backward
+const int pwm2 = 2;
+const int pwm3 = 3; //
+const int gnd = 4;
 
 double motorPower = 0;
 
 
 void setup() {
 
-    TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
+//  TCCR3B &= (0xff & 0x2); // change pwm frequency to 40k or something
+//  TCCR4B &= (0xff & 0x2); // change pwm frequency to 40k or something
 
 
-
+  pinMode(gnd, OUTPUT); 
+  digitalWrite(gnd, LOW); 
+  
   pinMode(pwm0, OUTPUT);
   digitalWrite(pwm0, LOW);
   pinMode(pwm1, OUTPUT);
@@ -36,9 +39,9 @@ void setup() {
 void loop() {
 
 
-  motorPower = sin(millis() / 1000.0f / PI) * 220.0f;
+  motorPower = 0;//sin(millis() / 500.0f / PI) * 120.0f;
 
-  int speed = map(abs(round(motorPower)), 0, 220, 15,220);
+  int speed = map(abs(round(motorPower)), 0, 255, 0, 255);
 
   if (motorPower < 0) {
 
@@ -62,7 +65,8 @@ void loop() {
 
   }
 
-  Serial.println(speed);
+  Serial.println(motorPower);
+  
 }
 
 

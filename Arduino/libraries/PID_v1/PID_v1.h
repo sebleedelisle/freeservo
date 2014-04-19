@@ -15,7 +15,7 @@ class PID
   #define REVERSE  1
 
   //commonly used functions **************************************************************************
-    PID(double*, double*, double*,        // * constructor.  links the PID to the Input, Output, and 
+    PID(volatile double*, volatile double*, volatile double*,        // * constructor.  links the PID to the Input, Output, and 
         double, double, double, int);     //   Setpoint.  Initial tuning parameters are also set here
 	
     void SetMode(int Mode);               // * sets PID to either Manual (0) or Auto (non-0)
@@ -64,9 +64,9 @@ class PID
 
 	int controllerDirection;
 
-    double *myInput;              // * Pointers to the Input, Output, and Setpoint variables
-    double *myOutput;             //   This creates a hard link between the variables and the 
-    double *mySetpoint;           //   PID, freeing the user from having to constantly tell us
+    volatile double *myInput;              // * Pointers to the Input, Output, and Setpoint variables
+    volatile double *myOutput;             //   This creates a hard link between the variables and the 
+    volatile double *mySetpoint;           //   PID, freeing the user from having to constantly tell us
                                   //   what these values are.  with pointers we'll just know.
 			  
 	unsigned long lastTime;

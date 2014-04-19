@@ -5,10 +5,11 @@
 //const int pwmPin = 3;
 
 // Paul's motor shield
-const int pwm0 = 2; // 0 and 3 make it go forward
-const int pwm1 = 3; // 1 and 2 make it go backward
-const int pwm2 = 4;
-const int pwm3 = 5; //
+const int pwm0 = 5; // 0 and 3 make it go forward
+const int pwm1 = 6; // 1 and 2 make it go backward
+const int pwm2 = 2;
+const int pwm3 = 3; //
+const int grdPin = 4; 
 
 
 
@@ -23,12 +24,14 @@ double position, targetPosition, motorPower;
 long counter = 0;
 
 //PID myPID(&position, &motorPower, &targetPosition,0.02,0.4,0.02,DIRECT);
-PID myPID(&position, &motorPower, &targetPosition, 5, 10, 0.1, DIRECT);
+//0.88, Ki=0.16, Kd=0.009;
+PID myPID(&position, &motorPower, &targetPosition, 0.88, 0.16, 0.009, DIRECT);
 
 
 void setup() {
 
-  TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
+ //TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
+ //TCCR4B &= (0xff & 0x1); // change pwm frequency to 40k or something
 
   position = targetPosition = motorPower = 0;
 
@@ -44,8 +47,8 @@ void setup() {
   aState = digitalRead(aPin);
   bState = digitalRead(bPin);
 
-
-
+  pinMode(grdPin, OUTPUT);
+  digitalWrite(grdPin, LOW);
   pinMode(pwm0, OUTPUT);
   digitalWrite(pwm0, LOW);
   pinMode(pwm1, OUTPUT);
@@ -68,7 +71,7 @@ void loop() {
 
   myPID.Compute();
 
-  targetPosition = 0;//round(sin(millis() * 0.001f) * 10000.0f);
+  targetPosition = round(sin(millis() * 0.001f) * 20000.0f);
 
   // motorPower automatically updated by the PID algo
   //analogWrite(pwmPin, abs(round(motorPower)));
