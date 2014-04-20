@@ -1,29 +1,21 @@
 //#define USE_MOTOR_SHIELD
 #define USE_PAUL_MOTOR_DRIVE
+#define USE_ENCODER_LIBRARY
 
 
 
 #include <PID_v1.h>
-#include<stdlib.h>
-#include "MotorDrives.h"
-
-// encoder pins
-const int aPin = 20; // interrupt 3 Port PD1 (vars not actually used any more)
-const int bPin = 21; // interrupt 2 Port PD0
-
-const int errorLightPin = 13; 
-
-#define aPort PIND
-#define aPortPin PD1
-#define bPort PIND
-#define bPortPin PD0
-
-
-volatile unsigned int aState, bState;
 
 volatile double position, targetPosition, motorPower;
 
-int errorMargin = 1000; // the number of ticks out of place before the servo goes
+#include<stdlib.h>
+#include "Encoder.h"
+#include "MotorDrives.h"
+
+const int errorLightPin = 13; 
+
+
+int errorMargin = 2000; // the number of ticks out of place before the servo goes
 // into error.
 
 bool servoError = false;
@@ -33,39 +25,31 @@ long counter = 0;
 String command = "";
 boolean commandComplete = false;
 
-double Kp = 0.44, Ki = 0.06, Kd = 0.0019;
+double Kp = 0.14, Ki = 0.03, Kd = 0.0013;
 
 PID myPID(&position, &motorPower, &targetPosition, Kp, Ki, Kd, DIRECT);
 
 
 void setup() {
-  targetPosition = 10000;
+
   command.reserve(256);
   Serial.begin(9600);
 
   //TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
   //TCCR4B &= (0xff & 0x1); // change pwm frequency to 40k or something
 
+  initEncoder(); 
+
   position = targetPosition = motorPower = 0;
 
-  attachInterrupt(3, aChange, CHANGE);
-  attachInterrupt(2, bChange, CHANGE);
-  //PCattachInterrupt(aPin, aChange, CHANGE);
-  //PCattachInterrupt(bPin, bChange, CHANGE);
-
-
-  pinMode(aPin, INPUT);
-  pinMode(bPin, INPUT);
   pinMode(errorLightPin, OUTPUT); 
 
-  aState = digitalRead(aPin);
-  bState = digitalRead(bPin);
 
-  // initMotorPins();
+  initMotorPins();
 
   myPID.SetOutputLimits(-205, 205);
   myPID.SetMode(AUTOMATIC);
-  myPID.SetSampleTime(5);
+  myPID.SetSampleTime(1);
   myPID.SetTunings(Kp, Ki, Kd);
 
 
@@ -73,13 +57,17 @@ void setup() {
 
 
 void loop() {
-
+  
+  updateEncoder(); 
+  
+  
   myPID.Compute();
 
+  
   if (!servoError) setMotorPower(motorPower);
   else setMotorPower(0);
 
-  targetPosition = round((cos(millis() * 0.001f)-1) * 40000.0f);
+  targetPosition = round((cos(millis() * 0.001f)-1) * 20000.0f);
 
   if (abs(position - targetPosition) > errorMargin) servoError = true;
 
@@ -126,55 +114,6 @@ void checkSerial() {
 
 
   }
-}
-
-void aChange() {
-
-  aState = (aPort & (1 << aPortPin)) >> aPortPin;
-
-  // oooooo XOR!
-  (bState ^ aState) ? position++ : position--;
-
-
-  //  if (aState == HIGH) {
-  //    // rising
-  //    if (bState == LOW)
-  //      position++;
-  //    else
-  //      position--;
-  //  }
-  //  else {
-  //    // falling
-  //    if (bState == HIGH)
-  //      position++;
-  //    else
-  //      position --;
-  //
-  //  }
-
-}
-
-void bChange() {
-
-  bState = (bPort & (1 << bPortPin)) >> bPortPin;
-  bState^aState ? position-- : position++;
-
-  //  if (bState == HIGH) {
-  //    // rising
-  //    if (aState == HIGH)
-  //      position++;
-  //    else
-  //      position--;
-  //  }
-  //  else {
-  //    // falling
-  //    if (aState == LOW)
-  //      position++;
-  //    else
-  //      position --;
-  //
-  //  }
-
 }
 
 void serialEvent() {
