@@ -37,16 +37,16 @@ void setMotorPower(volatile double& power) {
 
 const int pwm0 = 5; // 0 and 3 make it go forward
 const int pwm1 = 6; // 1 and 2 make it go backward
-const int pwm2 = 2;
-const int pwm3 = 3; //
-const int grdPin = 4;
+const int pwm2 = 9;
+const int pwm3 = 10; //
+//const int grdPin = 4;
 
 
 
 
 void initMotorPins() {
-  pinMode(grdPin, OUTPUT);
-  digitalWrite(grdPin, LOW);
+  //pinMode(grdPin, OUTPUT);
+  //digitalWrite(grdPin, LOW);
   pinMode(pwm0, OUTPUT);
   digitalWrite(pwm0, LOW);
   pinMode(pwm1, OUTPUT);

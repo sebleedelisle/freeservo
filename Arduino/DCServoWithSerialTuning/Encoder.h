@@ -4,8 +4,8 @@
 #endif
 
 // encoder pins
-const int aPin = 20; // interrupt 3 Port PD1 (vars not actually used any more)
-const int bPin = 21; // interrupt 2 Port PD0
+const int aPin = 2; // interrupt 3 Port PD1 (vars not actually used any more)
+const int bPin = 3; // interrupt 2 Port PD0
 
 #ifdef USE_ENCODER_LIBRARY
 

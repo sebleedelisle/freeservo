@@ -15,7 +15,7 @@ volatile double position, targetPosition, motorPower;
 const int errorLightPin = 13; 
 
 
-int errorMargin = 2000; // the number of ticks out of place before the servo goes
+int errorMargin = 6000; // the number of ticks out of place before the servo goes
 // into error.
 
 bool servoError = false;
@@ -47,10 +47,28 @@ void setup() {
 
   initMotorPins();
 
-  myPID.SetOutputLimits(-205, 205);
+  myPID.SetOutputLimits(-245, 245);
   myPID.SetMode(AUTOMATIC);
   myPID.SetSampleTime(1);
   myPID.SetTunings(Kp, Ki, Kd);
+  
+    //---------------------------------------------- Set PWM frequency for D5 & D6 -------------------------------
+  
+TCCR0B = TCCR0B & B11111000 | B00000001;    // set timer 0 divisor to     1 for PWM frequency of 62500.00 Hz
+//TCCR0B = TCCR0B & B11111000 | B00000010;    // set timer 0 divisor to     8 for PWM frequency of  7812.50 Hz
+//  TCCR0B = TCCR0B & B11111000 | B00000011;    // set timer 0 divisor to    64 for PWM frequency of   976.56 Hz
+//TCCR0B = TCCR0B & B11111000 | B00000100;    // set timer 0 divisor to   256 for PWM frequency of   244.14 Hz
+//TCCR0B = TCCR0B & B11111000 | B00000101;    // set timer 0 divisor to  1024 for PWM frequency of    61.04 Hz
+
+
+//---------------------------------------------- Set PWM frequency for D9 & D10 ------------------------------
+  
+TCCR1B = TCCR1B & B11111000 | B00000001;    // set timer 1 divisor to     1 for PWM frequency of 31372.55 Hz
+//TCCR1B = TCCR1B & B11111000 | B00000010;    // set timer 1 divisor to     8 for PWM frequency of  3921.16 Hz
+//TCCR1B = TCCR1B & B11111000 | B00000011;    // set timer 1 divisor to    64 for PWM frequency of   490.20 Hz
+//TCCR1B = TCCR1B & B11111000 | B00000100;    // set timer 1 divisor to   256 for PWM frequency of   122.55 Hz
+//TCCR1B = TCCR1B & B11111000 | B00000101;    // set timer 1 divisor to  1024 for PWM frequency of    30.64 Hz
+
 
 
 }
@@ -67,7 +85,7 @@ void loop() {
   if (!servoError) setMotorPower(motorPower);
   else setMotorPower(0);
 
-  targetPosition = round((cos(millis() * 0.001f)-1) * 20000.0f);
+  targetPosition = round(((cos(millis() * 0.000005f)) -1) * 100000.0f);
 
   if (abs(position - targetPosition) > errorMargin) servoError = true;
 

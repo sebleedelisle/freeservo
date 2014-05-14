@@ -7,21 +7,39 @@
 // Paul's motor shield
 const int pwm0 = 5; // 0 and 3 make it go forward
 const int pwm1 = 6; // 1 and 2 make it go backward
-const int pwm2 = 2;
-const int pwm3 = 3; //
-const int gnd = 4;
+const int pwm2 = 9;
+const int pwm3 = 10; //
+//const int gnd = 4;
 
 double motorPower = 0;
 
 
 void setup() {
 
+  //---------------------------------------------- Set PWM frequency for D5 & D6 -------------------------------
+  
+//TCCR0B = TCCR0B & B11111000 | B00000001;    // set timer 0 divisor to     1 for PWM frequency of 62500.00 Hz
+TCCR0B = TCCR0B & B11111000 | B00000010;    // set timer 0 divisor to     8 for PWM frequency of  7812.50 Hz
+//  TCCR0B = TCCR0B & B11111000 | B00000011;    // set timer 0 divisor to    64 for PWM frequency of   976.56 Hz
+//TCCR0B = TCCR0B & B11111000 | B00000100;    // set timer 0 divisor to   256 for PWM frequency of   244.14 Hz
+//TCCR0B = TCCR0B & B11111000 | B00000101;    // set timer 0 divisor to  1024 for PWM frequency of    61.04 Hz
+
+
+//---------------------------------------------- Set PWM frequency for D9 & D10 ------------------------------
+  
+//TCCR1B = TCCR1B & B11111000 | B00000001;    // set timer 1 divisor to     1 for PWM frequency of 31372.55 Hz
+TCCR1B = TCCR1B & B11111000 | B00000010;    // set timer 1 divisor to     8 for PWM frequency of  3921.16 Hz
+//TCCR1B = TCCR1B & B11111000 | B00000011;    // set timer 1 divisor to    64 for PWM frequency of   490.20 Hz
+//TCCR1B = TCCR1B & B11111000 | B00000100;    // set timer 1 divisor to   256 for PWM frequency of   122.55 Hz
+//TCCR1B = TCCR1B & B11111000 | B00000101;    // set timer 1 divisor to  1024 for PWM frequency of    30.64 Hz
+ bitSet(TCCR1B, WGM12); // set Timer 1 to fast mode so as to match 0. 
+  
 //  TCCR3B &= (0xff & 0x2); // change pwm frequency to 40k or something
 //  TCCR4B &= (0xff & 0x2); // change pwm frequency to 40k or something
 
 
-  pinMode(gnd, OUTPUT); 
-  digitalWrite(gnd, LOW); 
+  //pinMode(gnd, OUTPUT); 
+  //digitalWrite(gnd, LOW); 
   
   pinMode(pwm0, OUTPUT);
   digitalWrite(pwm0, LOW);
@@ -39,7 +57,7 @@ void setup() {
 void loop() {
 
 
-  motorPower = 0;//sin(millis() / 500.0f / PI) * 120.0f;
+  motorPower = sin(millis() / 10000.0f / PI) * 250.0f;
 
   int speed = map(abs(round(motorPower)), 0, 255, 0, 255);
 
@@ -50,8 +68,6 @@ void loop() {
 
     analogWrite(pwm0, speed);
     analogWrite(pwm3, speed);
-
-
 
   } else {
 
