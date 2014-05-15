@@ -28,9 +28,9 @@ void setDuty(float percent)
   long threshold = (fabs(percent)/100.0) * pwmCycle;
   
   // Driving forwards... will output on digital pin 10
-  if(percent > 0)
+  if(percent > 0.0)
   {
-    if(percent >= 100) // full duty 
+    if(percent >= 100.0) // full duty 
     {
       TCCR1A &= 0b00001111; // disconnect PWM, normal GPIO on PB1 and PB2
       PORTB &= 0b11111101; // pin 9 LOW
@@ -45,9 +45,9 @@ void setDuty(float percent)
     }
   }
   // Driving reverse... will output on digital pin 9
-  else if(percent < 0)
+  else if(percent < 0.0)
   {
-    if(percent >= 100) // full duty 
+    if(percent <= -100.0) // full duty 
     {
       TCCR1A &= 0b00001111; // disconnect PWM, normal GPIO on PB1 and PB2
       PORTB &= 0b11111011; // pin 10 LOW
