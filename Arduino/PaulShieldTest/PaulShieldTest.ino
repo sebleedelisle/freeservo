@@ -57,7 +57,7 @@ TCCR1B = TCCR1B & B11111000 | B00000010;    // set timer 1 divisor to     8 for 
 void loop() {
 
 
-  motorPower = sin(millis() / 10000.0f / PI) * 250.0f;
+  motorPower = -20; //sin(millis() / 1000.0f / PI) * 150.0f;
 
   int speed = map(abs(round(motorPower)), 0, 255, 0, 255);
 
@@ -66,7 +66,8 @@ void loop() {
     digitalWrite(pwm1, LOW);
     digitalWrite(pwm2, LOW);
 
-    analogWrite(pwm0, speed);
+    //analogWrite(pwm0, speed);
+    digitalWrite(pwm0, HIGH);
     analogWrite(pwm3, speed);
 
   } else {
@@ -75,7 +76,8 @@ void loop() {
     digitalWrite(pwm3, LOW);
 
     analogWrite(pwm1, speed);
-    analogWrite(pwm2, speed);
+    //analogWrite(pwm2, speed);
+    digitalWrite(pwm2, HIGH);
 
 
 

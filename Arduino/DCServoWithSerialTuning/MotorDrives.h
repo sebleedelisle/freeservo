@@ -1,6 +1,74 @@
 
 #pragma once
 #include "Arduino.h"
+#include "pwm.h"
+
+
+#ifdef USE_PAUL_MOTOR_DRIVE
+
+// Paul's motor shield
+// Wiring is easy - wire pins in order straight into pins 2 to 6
+// PWM 1     PWM 0     GND     PWM 3    PWM 2
+//   \/        \/       \/       \/       \/
+//   6          5       4         3       2
+
+
+//const int grdPin = 4;
+
+
+
+
+void initMotor() {
+
+  pinMode(pwm0, OUTPUT);
+  digitalWrite(pwm0, LOW);
+  pinMode(pwm1, OUTPUT);
+  digitalWrite(pwm1, LOW);
+  pinMode(pwm2, OUTPUT);
+  digitalWrite(pwm2, LOW);
+  pinMode(pwm3, OUTPUT);
+  digitalWrite(pwm3, LOW);
+  
+  //initPWM();
+
+  
+
+}
+
+void setMotorPower(volatile double power) {
+ 
+  //setDuty(power);
+
+  
+  int speed = map(abs(round(power)),0,100,5,255);
+
+  if (power < 0) {
+
+    digitalWrite(pwm1, LOW);
+    digitalWrite(pwm2, LOW);
+
+    //analogWrite(pwm0, speed);
+    digitalWrite(pwm0, HIGH);
+    analogWrite(pwm3, speed);
+
+
+
+  } else {
+
+    digitalWrite(pwm0, LOW);
+    digitalWrite(pwm3, LOW);
+
+     analogWrite(pwm1, speed);
+    //analogWrite(pwm2, speed);
+    digitalWrite(pwm2, HIGH);
+
+
+
+  }
+}
+
+#endif
+
 
 #ifdef USE_MOTOR_SHIELD
 
@@ -8,7 +76,7 @@
 const int dirPin = 12;
 const int pwmPin = 3;
 
-void initMotorPins() {
+void initMotor() {
 
   pinMode(dirPin, OUTPUT);
   pinMode(pwmPin, OUTPUT);
@@ -27,60 +95,3 @@ void setMotorPower(volatile double& power) {
 
 #endif
 
-#ifdef USE_PAUL_MOTOR_DRIVE
-
-// Paul's motor shield
-// Wiring is easy - wire pins in order straight into pins 2 to 6
-// PWM 1     PWM 0     GND     PWM 3    PWM 2
-//   \/        \/       \/       \/       \/
-//   6          5       4         3       2
-
-const int pwm0 = 5; // 0 and 3 make it go forward
-const int pwm1 = 6; // 1 and 2 make it go backward
-const int pwm2 = 9;
-const int pwm3 = 10; //
-//const int grdPin = 4;
-
-
-
-
-void initMotorPins() {
-  //pinMode(grdPin, OUTPUT);
-  //digitalWrite(grdPin, LOW);
-  pinMode(pwm0, OUTPUT);
-  digitalWrite(pwm0, LOW);
-  pinMode(pwm1, OUTPUT);
-  digitalWrite(pwm1, LOW);
-  pinMode(pwm2, OUTPUT);
-  digitalWrite(pwm2, LOW);
-  pinMode(pwm3, OUTPUT);
-  digitalWrite(pwm3, LOW);
-}
-
-void setMotorPower(volatile double power) {
-  int speed = abs(round(power));
-
-  if (power < 0) {
-
-    digitalWrite(pwm1, LOW);
-    digitalWrite(pwm2, LOW);
-
-    analogWrite(pwm0, speed);
-    analogWrite(pwm3, speed);
-
-
-
-  } else {
-
-    digitalWrite(pwm0, LOW);
-    digitalWrite(pwm3, LOW);
-
-    analogWrite(pwm1, speed);
-    analogWrite(pwm2, speed);
-
-
-
-  }
-}
-
-#endif

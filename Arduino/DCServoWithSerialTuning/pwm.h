@@ -1,11 +1,4 @@
 
-/*
-  ATMega328 - Testing use of 16-bit timer1 to generate a 20kHz PWM carrier with decent duty cycle resolution
-  
-  Note - some arduino functions might not play nice with this code (e.g. millis, analogWrite)
-*/
-
-
 // This is where we'll store the PWM cycle counter upper limit (in 16MHz ticks)
 unsigned int pwmCycle = 0;
 
@@ -20,8 +13,6 @@ void setCarrier(unsigned long hz)
   ICR1L = lowByte(pwmCycle);   
 }
 
-// Set the duty cycle. This is the count threshold at which the output goes from
-// HIGH to LOW on each PWM carrier cycle
 // Set the duty cycle. This is the count threshold at which the output goes from
 // HIGH to LOW on each PWM carrier cycle
 void setDuty(float percent)
@@ -71,10 +62,10 @@ void setDuty(float percent)
   }
 }
 
-void setup()
+void initPWM()
 {
-  pinMode(10, OUTPUT); 
-  pinMode(9, OUTPUT); 
+  pinMode(pwm2, OUTPUT); 
+  pinMode(pwm3, OUTPUT); 
 
   // Configure timer 1 PWM
   // WGM13:WGM10   b1111   Fast PWM mode, cycle duration set by OCR1A
@@ -82,19 +73,7 @@ void setup()
   //  TCCR1A = _BV(WGM11) | _BV(WGM10);  
   TCCR1A = _BV(WGM11);
   TCCR1B = _BV(WGM13) | _BV(WGM12) | _BV(CS10);
-  setCarrier(14000UL);
-  setDuty(-50.0);
-  Serial.begin(9600); 
-}
-
-void loop()
-{
-  
-  
-  
- // motorPower = sin(millis() / 1000.0f / PI) * 100.0f;
-  //setDuty( sin(millis() / 1000.0f / PI) * 90.0f); 
-
-  Serial.println(sin(millis() / 1000.0f / PI) * 90.0f);
+  setCarrier(20000UL);
+ 
 }
 

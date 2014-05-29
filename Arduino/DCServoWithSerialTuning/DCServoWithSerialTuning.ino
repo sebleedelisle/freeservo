@@ -9,10 +9,10 @@
 volatile double position, targetPosition, motorPower;
 
 #include<stdlib.h>
+#include "constants.h"
 #include "Encoder.h"
 #include "MotorDrives.h"
 
-const int errorLightPin = 13; 
 
 
 int errorMargin = 6000; // the number of ticks out of place before the servo goes
@@ -20,12 +20,14 @@ int errorMargin = 6000; // the number of ticks out of place before the servo goe
 
 bool servoError = false;
 
-long counter = 0;
+long startOffset = 0;
 
 String command = "";
 boolean commandComplete = false;
 
-double Kp = 0.14, Ki = 0.03, Kd = 0.0013;
+//double Kp = 0.14, Ki = 0.03, Kd = 0.0013;
+//double Kp = 0.88, Ki = 0.02, Kd = 0.0007;
+double Kp = 0.77, Ki = 0.37, Kd = 0.0005;
 
 PID myPID(&position, &motorPower, &targetPosition, Kp, Ki, Kd, DIRECT);
 
@@ -43,18 +45,18 @@ void setup() {
   position = targetPosition = motorPower = 0;
 
   pinMode(errorLightPin, OUTPUT); 
+  pinMode(okLightPin, OUTPUT); 
+  pinMode(resetPin, INPUT_PULLUP); 
+  pinMode(stepPin, INPUT); 
+  pinMode(dirPin, INPUT);
+  // attachInterrupt(stepPin, CHANGE);  
 
+  initMotor();
 
-  initMotorPins();
-
-  myPID.SetOutputLimits(-245, 245);
-  myPID.SetMode(AUTOMATIC);
-  myPID.SetSampleTime(1);
-  myPID.SetTunings(Kp, Ki, Kd);
-  
+  initialisePID();   
     //---------------------------------------------- Set PWM frequency for D5 & D6 -------------------------------
   
-TCCR0B = TCCR0B & B11111000 | B00000001;    // set timer 0 divisor to     1 for PWM frequency of 62500.00 Hz
+//TCCR0B = TCCR0B & B11111000 | B00000001;    // set timer 0 divisor to     1 for PWM frequency of 62500.00 Hz
 //TCCR0B = TCCR0B & B11111000 | B00000010;    // set timer 0 divisor to     8 for PWM frequency of  7812.50 Hz
 //  TCCR0B = TCCR0B & B11111000 | B00000011;    // set timer 0 divisor to    64 for PWM frequency of   976.56 Hz
 //TCCR0B = TCCR0B & B11111000 | B00000100;    // set timer 0 divisor to   256 for PWM frequency of   244.14 Hz
@@ -63,8 +65,8 @@ TCCR0B = TCCR0B & B11111000 | B00000001;    // set timer 0 divisor to     1 for 
 
 //---------------------------------------------- Set PWM frequency for D9 & D10 ------------------------------
   
-TCCR1B = TCCR1B & B11111000 | B00000001;    // set timer 1 divisor to     1 for PWM frequency of 31372.55 Hz
-//TCCR1B = TCCR1B & B11111000 | B00000010;    // set timer 1 divisor to     8 for PWM frequency of  3921.16 Hz
+//TCCR1B = TCCR1B & B11111000 | B00000001;    // set timer 1 divisor to     1 for PWM frequency of 31372.55 Hz
+TCCR1B = TCCR1B & B11111000 | B00000010;    // set timer 1 divisor to     8 for PWM frequency of  3921.16 Hz
 //TCCR1B = TCCR1B & B11111000 | B00000011;    // set timer 1 divisor to    64 for PWM frequency of   490.20 Hz
 //TCCR1B = TCCR1B & B11111000 | B00000100;    // set timer 1 divisor to   256 for PWM frequency of   122.55 Hz
 //TCCR1B = TCCR1B & B11111000 | B00000101;    // set timer 1 divisor to  1024 for PWM frequency of    30.64 Hz
@@ -77,31 +79,62 @@ TCCR1B = TCCR1B & B11111000 | B00000001;    // set timer 1 divisor to     1 for 
 void loop() {
   
   updateEncoder(); 
-  
-  
+ 
   myPID.Compute();
 
-  
-  if (!servoError) setMotorPower(motorPower);
-  else setMotorPower(0);
+  if (!servoError) {
+    setMotorPower(motorPower);
+    Serial.println(motorPower); 
+  } else setMotorPower(0);
 
-  targetPosition = round(((cos(millis() * 0.000005f)) -1) * 100000.0f);
+  targetPosition = 0;//round(((cos((millis()-startOffset) * 0.0008f)) -1) * 60000.0f);
 
   if (abs(position - targetPosition) > errorMargin) servoError = true;
 
-  if ((servoError && ((millis() % 500) < 250)) || (abs(targetPosition - position)>256)) {
+  if (servoError) { // && ((millis() % 500) < 250)) || (abs(targetPosition - position)>256)) {
     digitalWrite(errorLightPin, HIGH);
   } else {
     digitalWrite(errorLightPin, LOW);
   }
+  
+  
+  if(abs(targetPosition - position)<=10) {
+     digitalWrite(okLightPin, HIGH);
+  } else{ 
+     digitalWrite(okLightPin, LOW);   
+  }
 
 
   checkSerial();
-
-
-
+  if((servoError) && (digitalRead(resetPin) == LOW)) {
+     reset();  
+    
+  }
+  
+  digitalWrite(13, digitalRead(resetPin)); 
 }
 
+void reset() { 
+   
+    servoError = false; 
+    startOffset = millis(); 
+    encoder.write(0); 
+    position = targetPosition = motorPower = 0; 
+  
+}
+
+void initialisePID() { 
+  //encoder.write(0); 
+  position = targetPosition = motorPower = 0; 
+  myPID.SetOutputLimits(-95, 95); // 80% max power
+  myPID.SetMode(AUTOMATIC);
+  myPID.SetSampleTime(1);
+  myPID.SetTunings(Kp, Ki, Kd);
+  
+
+ 
+  
+}
 void checkSerial() {
 
   if ( commandComplete ) {
