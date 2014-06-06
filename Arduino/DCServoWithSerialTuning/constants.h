@@ -18,6 +18,14 @@ const int pwm2 = 6;
 const int pwm3 = 10; 
 
 
-const int stepPin = 4; 
-const int dirPin = 5; 
+const int stepPin = 11; 
+const int dirPin = 12; 
 
+
+#ifdef USE_RC_SERVO
+
+// Arduino Motor Shield control pins for motor A
+const int servoPin = 7;
+int zeroPoint = 94; 
+
+#endif

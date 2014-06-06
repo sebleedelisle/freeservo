@@ -1,5 +1,6 @@
 //#define USE_MOTOR_SHIELD
-#define USE_PAUL_MOTOR_DRIVE
+//#define USE_PAUL_MOTOR_DRIVE
+#define USE_RC_SERVO
 #define USE_ENCODER_LIBRARY
 
 
@@ -11,14 +12,18 @@ volatile double position, targetPosition, motorPower;
 #include<stdlib.h>
 #include "constants.h"
 #include "Encoder.h"
+#ifdef USE_RC_SERVO
+#include <Servo.h> 
+#endif
+
 #include "MotorDrives.h"
-
-
 
 int errorMargin = 6000; // the number of ticks out of place before the servo goes
 // into error.
 
 bool servoError = false;
+volatile int stepState = 0; 
+volatile int dirState = 0; 
 
 long startOffset = 0;
 
@@ -47,9 +52,10 @@ void setup() {
   pinMode(errorLightPin, OUTPUT); 
   pinMode(okLightPin, OUTPUT); 
   pinMode(resetPin, INPUT_PULLUP); 
-  pinMode(stepPin, INPUT); 
-  pinMode(dirPin, INPUT);
-  // attachInterrupt(stepPin, CHANGE);  
+  pinMode(stepPin, INPUT_PULLUP); 
+  pinMode(dirPin, INPUT_PULLUP);
+  attachInterrupt(stepPin, stepInterruptFired, CHANGE);  
+  attachInterrupt(dirPin, dirInterruptFired, CHANGE);  
 
   initMotor();
 
@@ -84,10 +90,10 @@ void loop() {
 
   if (!servoError) {
     setMotorPower(motorPower);
-    Serial.println(motorPower); 
-  } else setMotorPower(0);
-
-  targetPosition = 0;//round(((cos((millis()-startOffset) * 0.0008f)) -1) * 60000.0f);
+    //Serial.println(motorPower); 
+  } //else setMotorPower(0);
+  
+  //targetPosition = round(((cos((millis()-startOffset) * 0.0008f)) -1) * 1000.0f);
 
   if (abs(position - targetPosition) > errorMargin) servoError = true;
 
@@ -111,6 +117,8 @@ void loop() {
     
   }
   
+  Serial.println(digitalRead(dirPin)); 
+  
   digitalWrite(13, digitalRead(resetPin)); 
 }
 
@@ -126,7 +134,7 @@ void reset() {
 void initialisePID() { 
   //encoder.write(0); 
   position = targetPosition = motorPower = 0; 
-  myPID.SetOutputLimits(-95, 95); // 80% max power
+  myPID.SetOutputLimits(-100, 100); // 80% max power
   myPID.SetMode(AUTOMATIC);
   myPID.SetSampleTime(1);
   myPID.SetTunings(Kp, Ki, Kd);
@@ -166,6 +174,22 @@ void checkSerial() {
 
   }
 }
+
+
+void stepInterruptFired() { 
+  stepState = digitalRead(stepPin); 
+  if(!stepState) { 
+    if(dirState) targetPosition++; 
+    else targetPosition--; 
+  } 
+  
+} 
+
+void dirInterruptFired() { 
+  dirState = digitalRead(dirPin); 
+  
+}
+
 
 void serialEvent() {
   if (Serial.available()) {

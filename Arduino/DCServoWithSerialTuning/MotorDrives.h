@@ -4,6 +4,30 @@
 #include "pwm.h"
 
 
+
+#ifdef USE_RC_SERVO
+
+
+Servo rcServo;
+
+void initMotor() {
+
+  rcServo.attach(servoPin); 
+}
+
+void setMotorPower(volatile double& power) {
+  // power goes from -100 to 100
+  if(power<0) {
+    rcServo.write(map(power, -100, 0, 0, zeroPoint)); 
+  } else  {
+    rcServo.write(map(power, 0, 100, zeroPoint, 180)); 
+  }
+}
+
+
+#endif
+
+
 #ifdef USE_PAUL_MOTOR_DRIVE
 
 // Paul's motor shield
@@ -36,11 +60,11 @@ void initMotor() {
 }
 
 void setMotorPower(volatile double power) {
- 
+ // power goes from -100 to 100
   //setDuty(power);
 
   
-  int speed = map(abs(round(power)),0,100,5,255);
+  int speed = map(abs(round(power)),0,100,5,240);
 
   if (power < 0) {
 
