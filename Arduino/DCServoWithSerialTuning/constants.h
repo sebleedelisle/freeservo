@@ -18,8 +18,8 @@ const int pwm2 = 6;
 const int pwm3 = 10; 
 
 
-const int stepPin = 11; 
-const int dirPin = 12; 
+const int stepPin = 19; 
+const int dirPin = 18; 
 
 
 #ifdef USE_RC_SERVO
