@@ -4,6 +4,9 @@
 #define USE_ENCODER_LIBRARY
 #define USE_7SEG_DISPLAY
 
+#include <EEPROM.h>
+#include "EEPROMAnything.h"
+
 #include <PID_v1.h>
 
 volatile double position, targetPosition, motorPower;
@@ -45,6 +48,8 @@ boolean commandComplete = false;
 //double Kp = 0.14, Ki = 0.03, Kd = 0.0013;
 //double Kp = 0.88, Ki = 0.02, Kd = 0.0007;
 double Kp = 0.77, Ki = 0.37, Kd = 0.0005;
+const byte eepromValidateData = 1;
+const byte eepromDataAddr = 32;
 
 PID myPID(&position, &motorPower, &targetPosition, Kp, Ki, Kd, DIRECT);
 
@@ -52,7 +57,18 @@ PID myPID(&position, &motorPower, &targetPosition, Kp, Ki, Kd, DIRECT);
 void setup() {
 
   command.reserve(256);
+
+  byte eepromAddr = eepromValidateData;
+  if( EEPROM.read(eepromAddr++)==eepromValidateData ){
+    eepromAddr=EEPROM_readAnything(eepromAddr,Kp);
+    eepromAddr=EEPROM_readAnything(eepromAddr,Ki);
+    eepromAddr=EEPROM_readAnything(eepromAddr,Kd);    
+  }
+
+  while( !Serial );
+  
   Serial.begin(9600);
+  sendPIDOverSerial();
 
   //TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
   //TCCR4B &= (0xff & 0x1); // change pwm frequency to 40k or something
@@ -146,7 +162,7 @@ void loop() {
     
   }
   
-  Serial.println(digitalRead(dirPin)); 
+  //Serial.println(digitalRead(dirPin)); 
   
   digitalWrite(13, digitalRead(resetPin)); 
   
@@ -184,21 +200,19 @@ void checkSerial() {
 
     command.toCharArray( commandStr, command.length() + 1 );
 
-    Kp = strtod(commandStr, &ptr);
+    Kp = strtod(commandStr, &ptr);    
     ptr++;
     Ki = strtod(ptr, &ptr);
     ptr++;
     Kd = strtod(ptr, &ptr);
-
     myPID.SetTunings(Kp, Ki, Kd);
 
-
-    Serial.print( Kp );
-    Serial.print( "," );
-    Serial.print( Ki );
-    Serial.print( "," );
-    Serial.println( Kd );
-
+    byte eepromAddr = eepromValidateData;
+    EEPROM.write(eepromAddr++,eepromAddr);
+    eepromAddr=EEPROM_writeAnything(eepromAddr,Kp);
+    eepromAddr=EEPROM_writeAnything(eepromAddr,Ki);
+    eepromAddr=EEPROM_writeAnything(eepromAddr,Kd);    
+    //sendPIDOverSerial();
     //targetPosition = random(0,8000);
 
     commandComplete = false;
@@ -208,6 +222,18 @@ void checkSerial() {
   }
 }
 
+void sendPIDOverSerial(){
+    char buf[12];
+    dtostrf( Kp,12,8,buf );
+    Serial.print( buf );
+    Serial.print( ',' );
+    dtostrf( Ki,12,8,buf );
+    Serial.print( buf );
+    Serial.print( ',' );
+    dtostrf( Kd,12,8,buf );
+    Serial.print( buf );
+    Serial.println();
+}
 
 void stepInterruptFired() { 
   stepState = digitalRead(stepPin); 
