@@ -10,8 +10,9 @@ int myColorBackground = color(0,0,0);
 Knob knobKp;
 Knob knobKi;
 Knob knobKd;
-
+boolean supressSerialSend;
 float KiValue = 0;
+float kdScale = 100;
 
 void setup() {
   size(640,200);
@@ -50,13 +51,27 @@ void setup() {
     l.addItem(serialPorts[i],i);
   }
                
-  
 }
 
 void draw() {
   background(myColorBackground);
   fill(0);
   rect(0,0,width,height);
+  if( serial!=null && serial.available() > 0 ) {
+     String valuesStr = serial.readStringUntil('\n');
+     if( valuesStr != null ) {
+       float[] values = float( valuesStr.split(",") );
+       print( "Receiving: "+valuesStr );
+       //println( values );
+       
+       supressSerialSend = true;
+       knobKp.setValue( values[0] );
+       knobKi.setValue( values[1] );
+       knobKd.setValue( values[2] / kdScale );
+       supressSerialSend = false;
+       
+     }
+  }
   
 }
 
@@ -66,13 +81,13 @@ void controlEvent(ControlEvent theEvent) {
   if (theEvent.isGroup()) {
     int value = (int)theEvent.getGroup().getValue();
     
-    
     try{
       if( serial != null ){
         serial.clear();
         serial.stop();
       }
       serial = new Serial(this, Serial.list()[value], 9600);
+     
     }
     catch(Exception e){
       
@@ -95,11 +110,12 @@ void keyPressed() {
 }
 
 void ResendValues(){
+  if( supressSerialSend ) return;
   String v1 = String.format("%e",knobKp.getValue());
   String v2 = String.format("%e",knobKi.getValue());
-  String v3 = String.format("%e",knobKd.getValue()/100);
-  String msg = v1 +","+ v2 +","+ v3 + "\n";  
-  print( msg );
+  String v3 = String.format("%e",knobKd.getValue()*kdScale);
+  String msg = v1 +","+ v2 +","+ v3+"\n";  
+  print( "Sending: "+msg );
   if( serial != null ){
     try{
       serial.write( msg.getBytes() );
