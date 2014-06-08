@@ -16,11 +16,12 @@ void initMotor() {
 }
 
 void setMotorPower(volatile double& power) {
-  // power goes from -100 to 100
+  // power goes from -100 to 100 with the maxpower multiplier
+  float maxpower = 1; 
   if(power<0) {
-    rcServo.write(map(power, -100, 0, 0, zeroPoint)); 
+    rcServo.write(map(power, -100*maxpower, 0, 0, zeroPoint)); 
   } else  {
-    rcServo.write(map(power, 0, 100, zeroPoint, 180)); 
+    rcServo.write(map(power, 0, 100*maxpower, zeroPoint, 180)); 
   }
 }
 

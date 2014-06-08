@@ -10,29 +10,30 @@ void loop() {
    
   digitalWrite(3, HIGH); 
   delay(1); 
-  for(int i = 0; i<100; i++) { 
+  for(int i = 0; i<1000; i++) { 
     digitalWrite(2, HIGH); 
     delayMicroseconds(1); 
     digitalWrite(2, LOW); 
-    delay(20); 
+    delay(10); 
     
   }
   digitalWrite(3, LOW); 
   delay(1000); 
-  for(int i = 0; i<200; i++) { 
+  for(int i = 0; i<2000; i++) { 
     digitalWrite(2, HIGH); 
     delayMicroseconds(1); 
     digitalWrite(2, LOW); 
-    delay(20); 
+    delay(10); 
     
   }
  digitalWrite(3, HIGH); 
-    delay(1000); 
-  for(int i = 0; i<100; i++) { 
+  delay(1000); 
+  
+  for(int i = 0; i<1000; i++) { 
     digitalWrite(2, HIGH); 
     delayMicroseconds(1); 
     digitalWrite(2, LOW); 
-    delay(20); 
+    delay(10); 
     
   }
   
