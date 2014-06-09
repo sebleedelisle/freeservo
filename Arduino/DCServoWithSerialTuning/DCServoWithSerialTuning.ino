@@ -60,7 +60,7 @@ void setup() {
 
   command.reserve(256);
 
-  byte eepromAddr = eepromValidateData;
+  byte eepromAddr = eepromDataAddr;
   if( EEPROM.read(eepromAddr++)==eepromValidateData ){
     eepromAddr=EEPROM_readAnything(eepromAddr,Kp);
     eepromAddr=EEPROM_readAnything(eepromAddr,Ki);
@@ -213,8 +213,8 @@ void checkSerial() {
     Kd = strtod(ptr, &ptr);
     myPID.SetTunings(Kp, Ki, Kd);
 
-    byte eepromAddr = eepromValidateData;
-    EEPROM.write(eepromAddr++,eepromAddr);
+    byte eepromAddr = eepromDataAddr;
+    EEPROM.write(eepromAddr++,eepromValidateData);
     eepromAddr=EEPROM_writeAnything(eepromAddr,Kp);
     eepromAddr=EEPROM_writeAnything(eepromAddr,Ki);
     eepromAddr=EEPROM_writeAnything(eepromAddr,Kd);    
