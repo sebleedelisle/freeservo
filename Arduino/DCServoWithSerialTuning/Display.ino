@@ -3,6 +3,14 @@
 void updateDisplay() { 
  //targetPosition = -6450210; 
   
+  if(servoError) { 
+   matrix1.printError(); 
+   matrix2.printError();  
+   matrix1.writeDisplay(); 
+   matrix2.writeDisplay(); 
+   return; 
+    
+  }
   if(lastDisplayedPos == targetPosition) return;
    
   long matrix2num = (long)floor(abs(targetPosition)) %10000; 

@@ -26,6 +26,6 @@ const int dirPin = 18;
 
 // Arduino Motor Shield control pins for motor A
 const int servoPin = 7;
-int zeroPoint = 94; 
+int zeroPoint = 93; 
 
 #endif
