@@ -50,7 +50,7 @@ boolean commandComplete = false;
 //double Kp = 0.14, Ki = 0.03, Kd = 0.0002;
 //double Kp = 0.88, Ki = 0.02, Kd = 0.0007;
 double Kp = 0.77, Ki = 0.37, Kd = 0.0005;
-const byte eepromValidateData = 1;
+const byte eepromValidateData = 2;
 const byte eepromDataAddr = 32;
 
 PID myPID(&position, &motorPower, &targetPosition, Kp, Ki, Kd, DIRECT);

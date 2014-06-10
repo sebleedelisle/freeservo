@@ -67,11 +67,9 @@ void draw() {
         String message = serial.readStringUntil('\n');
         // String[] parts = message.split(":") ; 
         if (message!=null) { 
+            println();
             print( "Receiving: "+message );
             String[] parts = message.split(":") ; 
-            print("parts"); 
-            print(parts[0] == "PID"); 
-                  print(parts[1]); 
             if (parts[0].equals("PID")) { 
           
                 if ( parts[1] != null ) {
