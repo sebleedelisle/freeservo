@@ -35,7 +35,7 @@ double lastDisplayedPos;
 
 #include "MotorDrives.h"
 
-int errorMargin = 60; // the number of ticks out of place before the servo goes
+int errorMargin = 2000; // the number of ticks out of place before the servo goes
 // into error.
 
 bool servoError = false;
@@ -87,18 +87,12 @@ void setup() {
   // PCintPort::attachInterrupt(stepPin, &stepInterruptFired, CHANGE);
   attachInterrupt(4, stepInterruptFired, CHANGE);  
  // attachInterrupt(5, dirInterruptFired, FALLING);  
+ 
+ pinMode(buzzerPin, OUTPUT); 
+ //tone(buzzerPin, 1000); 
   
   #ifdef USE_7SEG_DISPLAY
-  matrix1.begin(0x71); 
-  matrix2.begin(0x70); 
-  
-  lastDisplayedPos = 1; 
-  
-  updateDisplay(); 
-  matrix2.print(0xffff, HEX); 
-  matrix2.writeDisplay();
-  delay(500); 
-  
+  initDisplay(); 
   #endif
   
   initMotor();
@@ -146,8 +140,11 @@ void loop() {
   
 //targetPosition = round(((cos((millis()-startOffset) * 0.0008f)) -1) * 1000.0f);
 
-  if (abs(position - targetPosition) > errorMargin) servoError = true;
+  if ((!servoError) && (abs(position - targetPosition) > errorMargin)) {
+    servoError = true;
+    tone(buzzerPin, 1000, 10000);
 
+  }
   if (servoError) { // && ((millis() % 500) < 250)) || (abs(targetPosition - position)>256)) {
     digitalWrite(errorLightPin, HIGH);
   } else {
