@@ -12,7 +12,7 @@
 
 
 volatile double position, targetPosition, motorPower;
-
+  
 #include<stdlib.h>
 #include "constants.h"
 #include "Encoder.h"
@@ -224,21 +224,25 @@ void checkSerial() {
     commandComplete = false;
     command = "";
 
-
   }
 }
 
+
+
 void sendPIDOverSerial(){
-    char buf[12];
-    dtostrf( Kp,12,8,buf );
-    Serial.print( buf );
-    Serial.print( ',' );
-    dtostrf( Ki,12,8,buf );
-    Serial.print( buf );
-    Serial.print( ',' );
-    dtostrf( Kd,12,8,buf );
-    Serial.print( buf );
-    Serial.println();
+  
+  char buf[12];
+  dtostrf( Kp, 12, 8, buf );
+  Serial.print("PID:");
+  Serial.print( buf );
+  Serial.print( ',' );
+  dtostrf( Ki, 12, 8, buf );
+  Serial.print( buf );
+  Serial.print( ',' );
+  dtostrf( Kd, 12, 8, buf );
+  Serial.print( buf );
+  Serial.println();
+
 }
 
 // only falling now

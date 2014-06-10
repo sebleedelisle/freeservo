@@ -20,6 +20,7 @@ const int pwm3 = 10;
 
 const int stepPin = 19; 
 const int dirPin = 18; 
+const int buzzerPin = 12; 
 
 
 #ifdef USE_RC_SERVO
