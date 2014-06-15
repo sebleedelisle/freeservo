@@ -11,7 +11,8 @@
 #include <PID_v1.h>
 
 
-volatile double position, targetPosition, motorPower;
+volatile double position, targetPositionDouble, motorPower;
+volatile long targetPositionLong = 0;
   
 #include<stdlib.h>
 #include "constants.h"
@@ -53,8 +54,21 @@ double Kp = 0.77, Ki = 0.37, Kd = 0.0005;
 const byte eepromValidateData = 3;
 const byte eepromDataAddr = 32;
 
-PID myPID(&position, &motorPower, &targetPosition, Kp, Ki, Kd, DIRECT);
+PID myPID(&position, &motorPower, &targetPositionDouble, Kp, Ki, Kd, DIRECT);
 
+//////////////////////////////////////////////////////////////////////////////////
+// Interrupt service routine for pin change interrupt #2
+ISR(PCINT2_vect) 
+{
+  register byte copyPortD = PIND; // capture port value asap
+  if(copyPortD & (1<<DBIT_STEP)) // Ensure this is a RISING edge of step pin
+  {
+    if(copyPortD & (1<<DBIT_DIR))  // Check the direction pin
+      ++targetPositionLong; 
+    else
+      --targetPositionLong; 
+  }
+}
 
 void setup() {
 
@@ -77,16 +91,23 @@ void setup() {
 
   initEncoder(); 
 
-  position = targetPosition = motorPower = 0;
+  position = targetPositionDouble = motorPower = 0;
+  targetPositionLong = 0;
 
   pinMode(errorLightPin, OUTPUT); 
   pinMode(okLightPin, OUTPUT); 
   pinMode(resetPin, INPUT_PULLUP); 
   pinMode(stepPin, INPUT_PULLUP); 
   pinMode(dirPin, INPUT_PULLUP);
-  // PCintPort::attachInterrupt(stepPin, &stepInterruptFired, CHANGE);
-  attachInterrupt(4, stepInterruptFired, CHANGE);  
+
+ ///////////////////////////////////////////////////////
+ // configure interrupt on change for step pin
+ PCMSK2 = _BV(PCINT20);   // Configure pin change interrupt 2 on change in PCINT20/PD4 only
+ PCICR |= _BV(PCIE2);      // Enable pin change interrupt 2 
+ // attachInterrupt(4, stepInterruptFired, CHANGE);    
+ // PCintPort::attachInterrupt(stepPin, &stepInterruptFired, CHANGE);
  // attachInterrupt(5, dirInterruptFired, FALLING);  
+ ///////////////////////////////////////////////////////
  
  pinMode(buzzerPin, OUTPUT); 
  //tone(buzzerPin, 1000); 
@@ -131,6 +152,7 @@ void loop() {
   
   updateEncoder(); 
  
+  targetPositionDouble=targetPositionLong; // Copy the integer value updated by the ISR into the float value used by PID
   myPID.Compute();
 
   if (!servoError) {
@@ -140,7 +162,7 @@ void loop() {
   
 //targetPosition = round(((cos((millis()-startOffset) * 0.0008f)) -1) * 1000.0f);
 
-  if ((!servoError) && (abs(position - targetPosition) > errorMargin)) {
+  if ((!servoError) && (abs(position - targetPositionDouble) > errorMargin)) {
     servoError = true;
     tone(buzzerPin, 1000, 10000);
 
@@ -152,7 +174,7 @@ void loop() {
   }
   
   
-  if(abs(targetPosition - position)<=10) {
+  if(abs(targetPositionDouble - position)<=10) {
      digitalWrite(okLightPin, HIGH);
   } else{ 
      digitalWrite(okLightPin, LOW);   
@@ -171,7 +193,7 @@ void loop() {
   
   #ifdef USE_7SEG_DISPLAY
   updateDisplay(); 
-  #endif
+  #endif  
 }
 
 void reset() { 
@@ -179,18 +201,20 @@ void reset() {
     servoError = false; 
     startOffset = millis(); 
     encoder.write(0); 
-    position = targetPosition = motorPower = 0; 
+    position = targetPositionDouble = motorPower = 0; 
+    targetPositionLong = 0;
   
 }
 
 void initialisePID() { 
   //encoder.write(0); 
-  position = targetPosition = motorPower = 0; 
+  position = targetPositionDouble = motorPower = 0; 
+  targetPositionLong = 0;
   myPID.SetOutputLimits(-100, 100); // 80% max power
   myPID.SetMode(AUTOMATIC);
   myPID.SetSampleTime(1);
   myPID.SetTunings(Kp, Ki, Kd);
-  
+  targetPositionLong = targetPositionDouble;
 
  
   
@@ -242,6 +266,7 @@ void sendPIDOverSerial(){
 
 }
 
+/*
 // only falling now
 void stepInterruptFired() { 
   //stepState = digitalRead(stepPin); 
@@ -254,10 +279,13 @@ void stepInterruptFired() {
   
 } 
 
+
 //void dirInterruptFired() { 
 // dirState = digitalRead(dirPin); 
   
 //}
+*/
+
 
 void serialEvent() {
   if (Serial.available()) {
