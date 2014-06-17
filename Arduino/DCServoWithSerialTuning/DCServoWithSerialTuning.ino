@@ -2,7 +2,8 @@
 //#define USE_PAUL_MOTOR_DRIVE
 #define USE_RC_SERVO
 #define USE_ENCODER_LIBRARY
-#define USE_7SEG_DISPLAY
+//#define USE_7SEG_DISPLAY
+//#define USE_NEOPIXEL
 
 #include <EEPROM.h>
 #include "EEPROMAnything.h"
@@ -20,17 +21,21 @@ volatile double position, targetPosition, motorPower;
 #ifdef USE_RC_SERVO
 #include <Servo.h> 
 #endif
+
 #ifdef USE_7SEG_DISPLAY
 #include "Wire.h"
 #include "Adafruit_LEDBackpack.h"
 #include "Adafruit_GFX.h"
-
 Adafruit_7segment matrix1 = Adafruit_7segment();
 Adafruit_7segment matrix2 = Adafruit_7segment();
-
 double lastDisplayedPos;
+#endif
 
-
+#ifdef USE_NEOPIXEL
+#include <Adafruit_NeoPixel.h>
+#define NEOPIXEL_PIN 11
+int numLeds = 24;
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(numLeds, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 #endif
 
 #include "MotorDrives.h"
@@ -69,7 +74,7 @@ void setup() {
 
   while( !Serial );
   
-  Serial.begin(9600);
+  //Serial.begin(9600);
   sendPIDOverSerial();
 
   //TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
@@ -93,6 +98,11 @@ void setup() {
   
   #ifdef USE_7SEG_DISPLAY
   initDisplay(); 
+  #endif
+  
+  #ifdef USE_NEOPIXEL
+  strip.begin(); 
+  strip.show(); 
   #endif
   
   initMotor();
@@ -171,6 +181,10 @@ void loop() {
   
   #ifdef USE_7SEG_DISPLAY
   updateDisplay(); 
+  #endif
+  
+  #ifdef USE_7SEG_DISPLAY
+  updatePixelDisplay(); 
   #endif
 }
 
