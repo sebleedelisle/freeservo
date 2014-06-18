@@ -1,6 +1,6 @@
 #pragma once
 
-const int errorLightPin = A0; // LED when in error 
+const int errorLightPin = 13; // LED when in error 
 const int okLightPin = A1;    // LED when within 256 of where it should be 
 
 const int resetPin = A2;
@@ -19,9 +19,9 @@ const int pwm3 = 10;
 
 
 const int stepPin = 4; 
-const int dirPin = 2; 
+const int dirPin = 5; 
 #define DBIT_STEP  4
-#define DBIT_DIR   2
+#define DBIT_DIR   5
 
 const int buzzerPin = 12; 
 

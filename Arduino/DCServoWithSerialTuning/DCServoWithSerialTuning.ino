@@ -2,7 +2,7 @@
 //#define USE_PAUL_MOTOR_DRIVE
 #define USE_RC_SERVO
 #define USE_ENCODER_LIBRARY
-#define USE_7SEG_DISPLAY
+//#define USE_7SEG_DISPLAY
 
 #include <EEPROM.h>
 #include "EEPROMAnything.h"
@@ -36,7 +36,8 @@ double lastDisplayedPos;
 
 #include "MotorDrives.h"
 
-int errorMargin = 2000; // the number of ticks out of place before the servo goes
+const int warningMargin = 32; 
+const int errorMargin = 512; // the number of ticks out of place before the servo goes
 // into error.
 
 bool servoError = false;
@@ -104,9 +105,6 @@ void setup() {
  // configure interrupt on change for step pin
  PCMSK2 = _BV(PCINT20);   // Configure pin change interrupt 2 on change in PCINT20/PD4 only
  PCICR |= _BV(PCIE2);      // Enable pin change interrupt 2 
- // attachInterrupt(4, stepInterruptFired, CHANGE);    
- // PCintPort::attachInterrupt(stepPin, &stepInterruptFired, CHANGE);
- // attachInterrupt(5, dirInterruptFired, FALLING);  
  ///////////////////////////////////////////////////////
  
  pinMode(buzzerPin, OUTPUT); 
@@ -138,7 +136,7 @@ void setup() {
 //---------------------------------------------- Set PWM frequency for D9 & D10 ------------------------------
   
 //TCCR1B = TCCR1B & B11111000 | B00000001;    // set timer 1 divisor to     1 for PWM frequency of 31372.55 Hz
-TCCR1B = TCCR1B & B11111000 | B00000010;    // set timer 1 divisor to     8 for PWM frequency of  3921.16 Hz
+//TCCR1B = TCCR1B & B11111000 | B00000010;    // set timer 1 divisor to     8 for PWM frequency of  3921.16 Hz
 //TCCR1B = TCCR1B & B11111000 | B00000011;    // set timer 1 divisor to    64 for PWM frequency of   490.20 Hz
 //TCCR1B = TCCR1B & B11111000 | B00000100;    // set timer 1 divisor to   256 for PWM frequency of   122.55 Hz
 //TCCR1B = TCCR1B & B11111000 | B00000101;    // set timer 1 divisor to  1024 for PWM frequency of    30.64 Hz
@@ -162,19 +160,21 @@ void loop() {
   
 //targetPosition = round(((cos((millis()-startOffset) * 0.0008f)) -1) * 1000.0f);
 
-  if ((!servoError) && (abs(position - targetPositionDouble) > errorMargin)) {
+  if ((!servoError) && (abs(position - targetPositionLong) > errorMargin)) {
     servoError = true;
     tone(buzzerPin, 1000, 10000);
 
   }
-  if (servoError) { // && ((millis() % 500) < 250)) || (abs(targetPosition - position)>256)) {
+  
+  // flashes when in error, steady if warning
+  if ((servoError && ((millis() % 500) < 250)) || (abs(targetPositionLong - position)>warningMargin)) {
     digitalWrite(errorLightPin, HIGH);
   } else {
     digitalWrite(errorLightPin, LOW);
   }
   
   
-  if(abs(targetPositionDouble - position)<=10) {
+  if(abs(targetPositionLong - position)<=2) {
      digitalWrite(okLightPin, HIGH);
   } else{ 
      digitalWrite(okLightPin, LOW);   
@@ -184,16 +184,12 @@ void loop() {
   checkSerial();
   if((servoError) && (digitalRead(resetPin) == LOW)) {
      reset();  
-    
   }
-  
-  //Serial.println(digitalRead(dirPin)); 
-  
-  digitalWrite(13, digitalRead(resetPin)); 
   
   #ifdef USE_7SEG_DISPLAY
   updateDisplay(); 
   #endif  
+  
 }
 
 void reset() { 
@@ -219,87 +215,7 @@ void initialisePID() {
  
   
 }
-void checkSerial() {
-
-  if ( commandComplete ) {
-    char commandStr[command.length() + 1];
-    char *ptr;
-
-    command.toCharArray( commandStr, command.length() + 1 );
-
-    Kp = strtod(commandStr, &ptr);    
-    ptr++;
-    Ki = strtod(ptr, &ptr);
-    ptr++;
-    Kd = strtod(ptr, &ptr);
-    myPID.SetTunings(Kp, Ki, Kd);
-
-    byte eepromAddr = eepromDataAddr;
-    EEPROM.write(eepromAddr++,eepromValidateData);
-    eepromAddr+=EEPROM_writeAnything(eepromAddr,Kp);
-    eepromAddr+=EEPROM_writeAnything(eepromAddr,Ki);
-    eepromAddr+=EEPROM_writeAnything(eepromAddr,Kd);    
-    //sendPIDOverSerial();
-    //targetPosition = random(0,8000);
-
-    commandComplete = false;
-    command = "";
-
-  }
-}
 
 
-
-void sendPIDOverSerial(){
-  
-  char buf[12];
-  dtostrf( Kp, 12, 8, buf );
-  Serial.print("PID:");
-  Serial.print( buf );
-  Serial.print( ',' );
-  dtostrf( Ki, 12, 8, buf );
-  Serial.print( buf );
-  Serial.print( ',' );
-  dtostrf( Kd, 12, 8, buf );
-  Serial.print( buf );
-  Serial.println();
-
-}
-
-/*
-// only falling now
-void stepInterruptFired() { 
-  //stepState = digitalRead(stepPin); 
-  //dirState = digitalReadFast(dirPin); 
-  //if(!stepState) { 
-  if(!digitalReadFast(stepPin)) return; 
-  if(digitalReadFast(dirPin)) targetPosition++; 
-    else targetPosition--; 
-  //} 
-  
-} 
-
-
-//void dirInterruptFired() { 
-// dirState = digitalRead(dirPin); 
-  
-//}
-*/
-
-
-void serialEvent() {
-  if (Serial.available()) {
-    // get the new byte:
-    char inChar = (char)Serial.read();
-    // add it to the inputString:
-    // if the incoming character is a newline, set a flag
-    // so the main loop can do something about it:
-    if (inChar == '\n') {
-      commandComplete = true;
-    } else {
-      command += inChar;
-    }
-  }
-}
 
 
