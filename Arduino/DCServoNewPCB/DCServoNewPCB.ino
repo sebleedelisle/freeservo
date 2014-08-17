@@ -1,6 +1,7 @@
 //#define USE_MOTOR_SHIELD
-//#define USE_PAUL_MOTOR_DRIVE
-#define USE_RC_SERVO
+//#define USE_4_PWM
+#define USE_2_PWM
+//#define USE_RC_SERVO
 #define USE_ENCODER_LIBRARY
 //#define USE_7SEG_DISPLAY
 
@@ -22,12 +23,12 @@ volatile long targetPositionLong = 0;
 #include <Servo.h> 
 #endif
 #ifdef USE_7SEG_DISPLAY
-#include "Wire.h"
-#include "Adafruit_LEDBackpack.h"
-#include "Adafruit_GFX.h"
+//#include "Wire.h"
+//#include "Adafruit_LEDBackpack.h"
+//#include "Adafruit_GFX.h"
 
-Adafruit_7segment matrix1 = Adafruit_7segment();
-Adafruit_7segment matrix2 = Adafruit_7segment();
+//Adafruit_7segment matrix1 = Adafruit_7segment();
+//Adafruit_7segment matrix2 = Adafruit_7segment();
 
 double lastDisplayedPos;
 
@@ -96,8 +97,9 @@ void setup() {
   targetPositionLong = 0;
 
   pinMode(errorLightPin, OUTPUT); 
+  pinMode(warnLightPin, OUTPUT); 
   pinMode(okLightPin, OUTPUT); 
-  pinMode(resetPin, INPUT_PULLUP); 
+ // pinMode(resetPin, INPUT_PULLUP); 
   pinMode(stepPin, INPUT_PULLUP); 
   pinMode(dirPin, INPUT_PULLUP);
 
@@ -107,7 +109,7 @@ void setup() {
  PCICR |= _BV(PCIE2);      // Enable pin change interrupt 2 
  ///////////////////////////////////////////////////////
  
- pinMode(buzzerPin, OUTPUT); 
+ //pinMode(buzzerPin, OUTPUT); 
  //tone(buzzerPin, 1000); 
   
   #ifdef USE_7SEG_DISPLAY
@@ -150,31 +152,40 @@ void loop() {
   
   updateEncoder(); 
  
+ // targetPositionLong = round(((cos((millis()-startOffset) * 0.0008f)) -1) * 100.0f);
+
   targetPositionDouble=targetPositionLong; // Copy the integer value updated by the ISR into the float value used by PID
   myPID.Compute();
 
   if (!servoError) {
     setMotorPower(motorPower);
+        digitalWrite(errorLightPin, LOW);  
     //Serial.println(motorPower); 
-  } //else setMotorPower(0);
-  
-//targetPosition = round(((cos((millis()-startOffset) * 0.0008f)) -1) * 1000.0f);
-
+  } else {
+    setMotorPower(0);
+     digitalWrite(errorLightPin, HIGH);  
+  }
+ 
   if ((!servoError) && (abs(position - targetPositionLong) > errorMargin)) {
     servoError = true;
-    tone(buzzerPin, 1000, 10000);
+   // tone(buzzerPin, 1000, 10000);
+    
 
-  }
+  } 
+  
+
+  
   
   // flashes when in error, steady if warning
-  if ((servoError && ((millis() % 500) < 250)) || (abs(targetPositionLong - position)>warningMargin)) {
-    digitalWrite(errorLightPin, HIGH);
-  } else {
-    digitalWrite(errorLightPin, LOW);
-  }
+//  if ( (abs(targetPositionLong - position)>warningMargin)) {
+//    digitalWrite(warnLightPin, HIGH);
+//  } else {
+//    digitalWrite(warnLightPin, LOW);
+//  }
+
+  digitalWrite(warnLightPin, !digitalRead(7));
   
-  
-  if(abs(targetPositionLong - position)<=2) {
+  if(abs(targetPositionLong - position)<=0) {
      digitalWrite(okLightPin, HIGH);
   } else{ 
      digitalWrite(okLightPin, LOW);   
@@ -182,10 +193,10 @@ void loop() {
 
 
   checkSerial();
-  if((servoError) && (digitalRead(resetPin) == LOW)) {
-     reset();  
-  }
-  
+//  if((servoError) && (digitalRead(resetPin) == LOW)) {
+//     reset();  
+//  }
+//  
   #ifdef USE_7SEG_DISPLAY
   updateDisplay(); 
   #endif  
