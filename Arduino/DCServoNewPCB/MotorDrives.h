@@ -60,13 +60,13 @@ void setMotorPower(volatile double power) {
 
   if (power < 0) {
 
-    digitalWrite(pwmForward, HIGH);
-    analogWrite(pwmBackward, speed);
+    analogWrite(pwmForward, 255-speed);
+    digitalWrite(pwmBackward, HIGH);
 
   } else if(power>0) {
 
-    digitalWrite(pwmBackward, HIGH);
-    analogWrite(pwmForward, speed);
+    analogWrite(pwmBackward, 255-speed);
+    digitalWrite(pwmForward, HIGH);
 
   } else if(power == 0) { 
   digitalWrite(pwmBackward, LOW);
