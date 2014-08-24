@@ -53,7 +53,8 @@ boolean commandComplete = false;
 //double Kp = 0.14, Ki = 0.03, Kd = 0.0002;
 //double Kp = 0.88, Ki = 0.02, Kd = 0.0007;
 double Kp = 0.77, Ki = 0.37, Kd = 0.0005;
-const byte eepromValidateData = 3;
+//double Kp = 0.3, Ki = 0.05, Kd = 0.0003;
+const byte eepromValidateData = 6;
 const byte eepromDataAddr = 32;
 
 PID myPID(&position, &motorPower, &targetPositionDouble, Kp, Ki, Kd, DIRECT);
@@ -152,7 +153,7 @@ void loop() {
   
   updateEncoder(); 
  
- // targetPositionLong = round(((cos((millis()-startOffset) * 0.0008f)) -1) * 100.0f);
+  //targetPositionLong = round(((cos((millis()-startOffset) * 0.0008f)) -1) * 1000.0f);
 
   targetPositionDouble=targetPositionLong; // Copy the integer value updated by the ISR into the float value used by PID
   myPID.Compute();
@@ -176,14 +177,13 @@ void loop() {
 
   
   
-  // flashes when in error, steady if warning
-//  if ( (abs(targetPositionLong - position)>warningMargin)) {
-//    digitalWrite(warnLightPin, HIGH);
-//  } else {
-//    digitalWrite(warnLightPin, LOW);
-//  }
+  if ( (abs(targetPositionLong - position)>warningMargin)) {
+    digitalWrite(warnLightPin, HIGH);
+  } else {
+    digitalWrite(warnLightPin, LOW);
+  }
 
-  digitalWrite(warnLightPin, !digitalRead(7));
+  //digitalWrite(warnLightPin, !digitalRead(7));
   
   if(abs(targetPositionLong - position)<=0) {
      digitalWrite(okLightPin, HIGH);
@@ -219,7 +219,7 @@ void initialisePID() {
   targetPositionLong = 0;
   myPID.SetOutputLimits(-100, 100); // 80% max power
   myPID.SetMode(AUTOMATIC);
-  myPID.SetSampleTime(40);
+  myPID.SetSampleTime(1);
   myPID.SetTunings(Kp, Ki, Kd);
   targetPositionLong = targetPositionDouble;
 

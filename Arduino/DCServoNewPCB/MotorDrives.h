@@ -56,7 +56,7 @@ void setMotorPower(volatile double power) {
   //setDuty(power);
 
   
-  int speed = map(abs(round(power)),0,100,50,240);
+  int speed = map(abs(round(power)),0,100,10,240);
 
   if (power < 0) {
 
