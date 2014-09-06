@@ -25,8 +25,6 @@
  * THE SOFTWARE.
  */
 
-#define ENCODER_OPTIMIZE_INTERRUPTS
-
 #ifndef Encoder_h_
 #define Encoder_h_
 
