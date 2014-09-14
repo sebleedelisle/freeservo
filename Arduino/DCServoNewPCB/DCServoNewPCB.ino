@@ -37,7 +37,7 @@ double lastDisplayedPos;
 
 #include "MotorDrives.h"
 
-const int warningMargin = 32; 
+const int warningMargin = 10; 
 const int errorMargin = 512; // the number of ticks out of place before the servo goes
 // into error.
 
@@ -52,8 +52,10 @@ boolean commandComplete = false;
 
 //double Kp = 0.14, Ki = 0.03, Kd = 0.0002;
 //double Kp = 0.88, Ki = 0.02, Kd = 0.0007;
-double Kp = 0.77, Ki = 0.37, Kd = 0.0005;
+//double Kp = 0.77, Ki = 0.37, Kd = 0.0005;
 //double Kp = 0.3, Ki = 0.05, Kd = 0.0003;
+double Kp = 18, Ki = 0.1, Kd = 0.02;
+
 const byte eepromValidateData = 6;
 const byte eepromDataAddr = 32;
 
@@ -103,6 +105,8 @@ void setup() {
  // pinMode(resetPin, INPUT_PULLUP); 
   pinMode(stepPin, INPUT_PULLUP); 
   pinMode(dirPin, INPUT_PULLUP);
+  
+  pinMode(ampErrorPin, INPUT); 
 
  ///////////////////////////////////////////////////////
  // configure interrupt on change for step pin
@@ -164,7 +168,12 @@ void loop() {
     //Serial.println(motorPower); 
   } else {
     setMotorPower(0);
-     digitalWrite(errorLightPin, HIGH);  
+     
+     // this line should flash the red light if we have an amp error or just make it steady on 
+     // if it's a normal servo error.
+     
+     if(!digitalRead(ampErrorPin) && (millis()%200<100)) digitalWrite(errorLightPin, LOW);  
+     else digitalWrite(errorLightPin, HIGH); 
   }
  
   if ((!servoError) && (abs(position - targetPositionLong) > errorMargin)) {
@@ -185,7 +194,7 @@ void loop() {
 
   //digitalWrite(warnLightPin, !digitalRead(7));
   
-  if(abs(targetPositionLong - position)<=0) {
+  if(abs(targetPositionLong - position)<=2) {
      digitalWrite(okLightPin, HIGH);
   } else{ 
      digitalWrite(okLightPin, LOW);   
