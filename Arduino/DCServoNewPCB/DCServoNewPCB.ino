@@ -37,6 +37,9 @@ double lastDisplayedPos;
 
 #include "MotorDrives.h"
 
+#define TRACE_TO_EEPROM
+#include "TraceToEEPROM.h"
+
 const int warningMargin = 10; 
 const int errorMargin = 512; // the number of ticks out of place before the servo goes
 // into error.
@@ -161,6 +164,7 @@ void loop() {
 
   targetPositionDouble=targetPositionLong; // Copy the integer value updated by the ISR into the float value used by PID
   myPID.Compute();
+  TRACE_SAMPLE(position, targetPositionLong);
 
   if (!servoError) {
     setMotorPower(motorPower);
@@ -177,6 +181,7 @@ void loop() {
   }
  
   if ((!servoError) && (abs(position - targetPositionLong) > errorMargin)) {
+    TRACE_SAVE();
     servoError = true;
    // tone(buzzerPin, 1000, 10000);
     
