@@ -12,7 +12,7 @@
 #include <PID_v1.h>
 
 
-volatile double position, targetPositionDouble, motorPower, errorValue;
+volatile double position, targetPositionDouble, motorPower, errorValue, maxValue = 10000;
 volatile long targetPositionLong = 0;
 
 #include<stdlib.h>
@@ -170,6 +170,7 @@ void loop() {
   errorValue = targetPositionDouble - position; 
   if(errorValue<0) errorValue*=-1; 
 
+  
 
   if (!servoError) {
     setMotorPower(motorPower);
@@ -207,7 +208,16 @@ void loop() {
     digitalWrite(okLightPin, LOW);   
   }
 
-
+  // reset if the numbers get too high!
+  if(targetPositionDouble>maxValue) {
+    targetPositionDouble-=maxValue; 
+    position-=maxValue; 
+  }
+  
+  if(targetPositionDouble<-maxValue) {
+    targetPositionDouble+=maxValue; 
+    position+=maxValue; 
+  }
   // checkSerial();
   
   //  if((servoError) && (digitalRead(resetPin) == LOW)) {
