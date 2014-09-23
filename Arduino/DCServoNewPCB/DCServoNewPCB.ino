@@ -209,13 +209,13 @@ void loop() {
   }
 
   // reset if the numbers get too high!
-  if(targetPositionDouble>maxValue) {
+  if(targetPositionLong>maxValue) {
     targetPositionDouble-=maxValue; 
     targetPositionLong-=maxValue; 
     position-=maxValue; 
   }
   
-  if(targetPositionDouble<-maxValue) {
+  if(targetPositionLong<-maxValue) {
     targetPositionDouble+=maxValue; 
     targetPositionLong+=maxValue; 
     position+=maxValue; 
