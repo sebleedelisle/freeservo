@@ -42,7 +42,7 @@ const int errorMargin = 512; // the number of ticks out of place before the serv
 // into error.
 
 bool servoError = false;
-volatile int stepState = 0; 
+volatile int stepState = 0;
 volatile int dirState = 0; 
 
 long startOffset = 0;
@@ -54,7 +54,9 @@ boolean commandComplete = false;
 //double Kp = 0.88, Ki = 0.02, Kd = 0.0007;
 //double Kp = 0.77, Ki = 0.37, Kd = 0.0005;
 //double Kp = 0.3, Ki = 0.05, Kd = 0.0003;
-double Kp = 18, Ki = 0.1, Kd = 0.02;
+//double Kp = 18, Ki = 0.1, Kd = 0.02;
+//Paul's latest
+double Kp = 2, Ki = 0.1, Kd = 0.001;
 
 const byte eepromValidateData = 6;
 const byte eepromDataAddr = 32;
@@ -168,7 +170,7 @@ void loop() {
   myPID.Compute();
 
   errorValue = targetPositionDouble - position; 
-  if(errorValue<0) errorValue*=-1; 
+  if(errorValue<0) errorValue*=-1;
 
   
 
@@ -183,7 +185,7 @@ void loop() {
     // this line should flash the red light if we have an amp error or just make it steady on 
     // if it's a normal servo error. Although - does the ampError reset or stay permanently on? 
 
-    if(!digitalRead(ampErrorPin) && (millis()%200<100)) digitalWrite(errorLightPin, LOW);  
+    if(!digitalRead(ampErrorPin) && (millis()%500<250)) digitalWrite(errorLightPin, LOW);  
     else digitalWrite(errorLightPin, HIGH); 
   }
 
