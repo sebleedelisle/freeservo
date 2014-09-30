@@ -1,9 +1,9 @@
 //#define USE_MOTOR_SHIELD
 //#define USE_4_PWM
 #define USE_2_PWM
-//#define USE_RC_SERVO
 #define USE_ENCODER_LIBRARY
-//#define USE_7SEG_DISPLAY
+
+
 
 #include <EEPROM.h>
 #include "EEPROMAnything.h"
@@ -19,27 +19,12 @@ volatile long targetPositionLong = 0;
 #include "constants.h"
 #include "Encoder.h"
 
-#ifdef USE_RC_SERVO
-#include <Servo.h> 
-#endif
-#ifdef USE_7SEG_DISPLAY
-//#include "Wire.h"
-//#include "Adafruit_LEDBackpack.h"
-//#include "Adafruit_GFX.h"
-
-//Adafruit_7segment matrix1 = Adafruit_7segment();
-//Adafruit_7segment matrix2 = Adafruit_7segment();
-
-double lastDisplayedPos;
-
-
-#endif
 
 #include "MotorDrives.h"
 
 const int warningMargin = 10; 
 const int errorMargin = 512; // the number of ticks out of place before the servo goes
-// into error.
+                             // into error.
 
 bool servoError = false;
 volatile int stepState = 0; 
@@ -87,12 +72,9 @@ void setup() {
   }
 
 
-  // UNCOMMENT TO REENABLE ADJUSTMENT OVER HARDWARE SERIAL
-  //while( !Serial );
-  //Serial.begin(9600);
-  //sendPIDOverSerial();
-
-
+  while( !Serial );
+  Serial.begin(9600);
+  sendPIDOverSerial();
 
   //TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
   //TCCR4B &= (0xff & 0x1); // change pwm frequency to 40k or something
@@ -122,9 +104,6 @@ void setup() {
   pinMode(buzzerPin, OUTPUT); 
   tone(buzzerPin, 1000); 
 
-#ifdef USE_7SEG_DISPLAY
-  initDisplay(); 
-#endif
 
   initMotor();
 
@@ -185,6 +164,7 @@ void loop() {
 
     if(!digitalRead(ampErrorPin) && (millis()%200<100)) digitalWrite(errorLightPin, LOW);  
     else digitalWrite(errorLightPin, HIGH); 
+    
   }
 
   if ((!servoError) && (errorValue > errorMargin)) {
@@ -220,16 +200,12 @@ void loop() {
     targetPositionLong+=maxValue; 
     position+=maxValue; 
   }
-  // checkSerial();
+  checkSerial();
   
   //  if((servoError) && (digitalRead(resetPin) == LOW)) {
   //     reset();  
   //  }
-  //  
   
-#ifdef USE_7SEG_DISPLAY
-  updateDisplay(); 
-#endif  
 
 }
 

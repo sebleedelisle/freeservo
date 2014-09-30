@@ -4,42 +4,9 @@
 #include "pwm.h"
 
 
-
-#ifdef USE_RC_SERVO
-
-
-Servo rcServo;
-
-void initMotor() {
-
-  rcServo.attach(servoPin); 
-}
-
-void setMotorPower(volatile double& power) {
-  // power goes from -100 to 100 with the maxpower multiplier
-  float maxpower = 1; 
-  if(power<0) {
-    rcServo.write(map(power, -100*maxpower, 0, 0, zeroPoint)); 
-  } else  {
-    rcServo.write(map(power, 0, 100*maxpower, zeroPoint, 180)); 
-  }
-}
-
-
-#endif
-
 #ifdef USE_2_PWM
 
-// Paul's motor shield
-// Wiring is easy - wire pins in order straight into pins 2 to 6
-// PWM 1     PWM 0     GND     PWM 3    PWM 2
-//   \/        \/       \/       \/       \/
-//   6          5       4         3       2
-
-
-//const int grdPin = 4;
-
-
+// paul's new motor shield on the new PCB. 
 
 
 void initMotor() {
@@ -53,8 +20,6 @@ void initMotor() {
 
 void setMotorPower(volatile double power) {
  // power goes from -100 to 100
-  //setDuty(power);
-
   
   int speed = map(abs(round(power)),0,100,10,240);
 
@@ -84,10 +49,6 @@ void setMotorPower(volatile double power) {
 // PWM 1     PWM 0     GND     PWM 3    PWM 2
 //   \/        \/       \/       \/       \/
 //   6          5       4         3       2
-
-
-//const int grdPin = 4;
-
 
 
 

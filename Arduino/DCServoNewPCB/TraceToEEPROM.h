@@ -19,7 +19,7 @@ public:
     index = 0;
   }
   void sample(double position, long targetPositionLong) {
-    if(index > NUM_SAMPLES)
+    if(index >= NUM_SAMPLES)
       index = 0;
     TRACE_ENTRY& e=buf[index];
     e.ms = (byte)millis();
