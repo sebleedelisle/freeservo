@@ -43,10 +43,10 @@ boolean commandComplete = false;
 //double Kp = 0.88, Ki = 0.02, Kd = 0.0007;
 //double Kp = 0.77, Ki = 0.37, Kd = 0.0005;
 //double Kp = 0.3, Ki = 0.05, Kd = 0.0003;
-double Kp = 2, Ki = 0.1, Kd = 0.001;
+double Kp = 100, Ki = 6, Kd = 0.4;
 //double Kp = 2, Ki = 8, Kd = 0.01;
 
-const byte eepromValidateData = 1;
+const byte eepromValidateData = 2;
 const byte eepromDataAddr = 32;
 
 PID myPID(&position, &motorPower, &targetPositionDouble, Kp, Ki, Kd, DIRECT);
@@ -68,7 +68,7 @@ ISR(PCINT2_vect)
 void setup() {
 
   command.reserve(256);
-
+  setPwmFrequency(9, 8);
   byte eepromAddr = eepromDataAddr;
   if( EEPROM.read(eepromAddr++)==eepromValidateData ){
     eepromAddr+=EEPROM_readAnything(eepromAddr,Kp);
@@ -78,7 +78,7 @@ void setup() {
 
 
   while( !Serial );
-  Serial.begin(9600);
+  Serial.begin(115200);
   sendPIDOverSerial();
 
   //TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
@@ -252,7 +252,36 @@ void initialisePID() {
 
 }
 
-
+void setPwmFrequency(int pin, int divisor) {
+  byte mode;
+  if(pin == 5 || pin == 6 || pin == 9 || pin == 10) {
+    switch(divisor) {
+      case 1: mode = 0x01; break;
+      case 8: mode = 0x02; break;
+      case 64: mode = 0x03; break;
+      case 256: mode = 0x04; break;
+      case 1024: mode = 0x05; break;
+      default: return;
+    }
+    if(pin == 5 || pin == 6) {
+      TCCR0B = TCCR0B & 0b11111000 | mode;
+    } else {
+      TCCR1B = TCCR1B & 0b11111000 | mode;
+    }
+  } else if(pin == 3 || pin == 11) {
+    switch(divisor) {
+      case 1: mode = 0x01; break;
+      case 8: mode = 0x02; break;
+      case 32: mode = 0x03; break;
+      case 64: mode = 0x04; break;
+      case 128: mode = 0x05; break;
+      case 256: mode = 0x06; break;
+      case 1024: mode = 0x7; break;
+      default: return;
+    }
+    TCCR2B = TCCR2B & 0b11111000 | mode;
+  }
+}
 
 
 
