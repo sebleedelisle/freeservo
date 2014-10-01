@@ -74,7 +74,8 @@ void setMotorPower(volatile double power) {
   //setDuty(power);
 
   
-  int speed = map(abs(round(power)),0,100,5,240);
+  int speed = 0; 
+  if(round(power)!=0) map(abs(round(power)),0,100,5,240);
 
   if (power < 0) {
 
@@ -104,25 +105,26 @@ void setMotorPower(volatile double power) {
 #endif
 
 
-#ifdef USE_MOTOR_SHIELD
-
-// Arduino Motor Shield control pins for motor A
-const int dirPin = 12;
-const int pwmPin = 3;
+#ifdef USE_ARDUMOTO
+//motorPwm =;
+//motorDir
 
 void initMotor() {
 
-  pinMode(dirPin, OUTPUT);
-  pinMode(pwmPin, OUTPUT);
-  digitalWrite(pwmPin, 0);
-  digitalWrite(dirPin, 0);
+  pinMode(motorPwm, OUTPUT);
+  pinMode(motorDir, OUTPUT);
+  digitalWrite(motorPwm, 0);
+  digitalWrite(motorDir, 0);
 
 }
 
-void setMotorPower(volatile double& power) {
+void setMotorPower(volatile double power) {
   // motorPower automatically updated by the PID algo
-  analogWrite(pwmPin, abs(round(power)));
-  digitalWrite(dirPin, power < 0 ? HIGH : LOW);
+   int speed = map(abs(round(power)),0,100,30,254);
+  if(round(power) ==0) speed = 0; 
+
+  analogWrite(motorPwm, speed);
+  digitalWrite(motorDir, power > 0 ? HIGH : LOW);
 
 }
 

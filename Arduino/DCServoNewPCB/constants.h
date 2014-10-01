@@ -29,6 +29,14 @@ const int pwmBackward = 10;
 
 #endif
 
+
+#ifdef USE_ARDUMOTO
+
+const int motorPwm = 9;
+const int motorDir = 10;
+
+#endif
+
 const int stepPin = 4; 
 const int dirPin = 5; 
 #define DBIT_STEP  4

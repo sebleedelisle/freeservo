@@ -1,4 +1,4 @@
-
+/*
 // This is where we'll store the PWM cycle counter upper limit (in 16MHz ticks)
 unsigned int pwmCycle = 0;
 
@@ -62,6 +62,7 @@ void setDuty(float percent)
   }
 }
 
+
 void initPWM()
 {
   pinMode(pwmForward, OUTPUT); 
@@ -75,5 +76,5 @@ void initPWM()
   TCCR1B = _BV(WGM13) | _BV(WGM12) | _BV(CS10);
   setCarrier(20000UL);
  
-}
+}*/
 

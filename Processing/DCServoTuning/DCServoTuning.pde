@@ -13,37 +13,38 @@ Slider knobKd;
 boolean supressSerialSend;
 float KiValue = 0;
 float kdScale = 100;
+FloatList errors; 
 
 void setup() {
-    size(640, 400);
+    size(800, 600);
     smooth();
     noStroke();
-
+ errors = new FloatList(); 
     cp5 = new ControlP5(this);
 
     knobKp = cp5.addSlider("Kp")
-        .setSize(560, 15)
-            .setRange(0.001, 5)
+        .setSize(width-40, 15)
+            .setRange(0.001, 10)
                 .setValue(0.88)
-                    .setPosition(20, 240)
+                    .setPosition(20, height - 100)
                         // .setRadius(50)
                         // .setDragDirection(Knob.VERTICAL)
                         ;
 
     knobKi = cp5.addSlider("Ki")
-        .setSize(560, 15)
-            .setRange(0, 1)
+        .setSize(width-40, 15)
+            .setRange(0, 2)
                 .setValue(0.16)
-                    .setPosition(20, 280)
+                    .setPosition(20, height-70)
                         //.setRadius(50)
                         //.setDragDirection(Knob.VERTICAL)
                         ;
 
     knobKd = cp5.addSlider("Kd")
-        .setSize(560, 15)
-            .setRange(0, 1)
+        .setSize(width-40, 15)
+            .setRange(0, 2)
                 .setValue(0.9)
-                    .setPosition(20, 320)
+                    .setPosition(20, height-40)
                         //.setRadius(50)
                         //.setDragDirection(Knob.VERTICAL)
                         ;
@@ -66,13 +67,13 @@ void draw() {
     if ( serial!=null && serial.available() > 0 ) {
         String message = serial.readStringUntil('\n');
         // String[] parts = message.split(":") ; 
-        if (message!=null) { 
-            println();
-            print( "Receiving: "+message );
+        if ((message!=null) && (message.indexOf(':')>-1)) { 
             String[] parts = message.split(":") ; 
             if (parts[0].equals("PID")) { 
-          
-                if ( parts[1] != null ) {
+             println();
+            print( "Receiving: "+message );
+         
+                if (( parts.length>1) && (parts[1] != null )) {
                     float[] values = float( parts[1].split(",") );
                     //println( values );
                     print( "Setting PID : "+values[0]+" " + values[1] + " " + values[2]* kdScale );
@@ -82,9 +83,32 @@ void draw() {
                     knobKd.setValue( values[2] * kdScale );
                     supressSerialSend = false;
                 }
+            } else if (parts[0].equals("POS")) {
+                if (( parts.length>1) && ( parts[1] != null )) {
+                    println(message); 
+                    float[] values = float( parts[1].split(",") );
+                    if(values.length>1) {
+                        float pos = values[0]; 
+                        float target = values[1]; 
+                        float error = target-pos; 
+                        errors.append(error); 
+                        if(errors.size()>width) errors.remove(0); 
+                    }
+                }
             }
         }
     }
+    noFill(); 
+    stroke(100); 
+    line(0,300, width,300); 
+    stroke(255); 
+    beginShape(); 
+    for(int i =0; i<errors.size(); i++) { 
+        vertex(i, 300 + errors.get(i)); 
+        
+    }
+    endShape(); 
+    noStroke(); 
 }
 
 

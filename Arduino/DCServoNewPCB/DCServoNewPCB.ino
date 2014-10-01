@@ -1,6 +1,8 @@
 //#define USE_MOTOR_SHIELD
 //#define USE_4_PWM
-#define USE_2_PWM
+//#define USE_2_PWM
+#define USE_ARDUMOTO
+
 #define USE_ENCODER_LIBRARY
 
 
@@ -25,9 +27,11 @@ volatile long targetPositionLong = 0;
 const int warningMargin = 10; 
 const int errorMargin = 512; // the number of ticks out of place before the servo goes
                              // into error.
+                             
+int counter = 0; 
 
 bool servoError = false;
-volatile int stepState = 0;
+volatile int stepState = 0; 
 volatile int dirState = 0; 
 
 long startOffset = 0;
@@ -39,11 +43,10 @@ boolean commandComplete = false;
 //double Kp = 0.88, Ki = 0.02, Kd = 0.0007;
 //double Kp = 0.77, Ki = 0.37, Kd = 0.0005;
 //double Kp = 0.3, Ki = 0.05, Kd = 0.0003;
-//double Kp = 18, Ki = 0.1, Kd = 0.02;
-//Paul's latest
 double Kp = 2, Ki = 0.1, Kd = 0.001;
+//double Kp = 2, Ki = 8, Kd = 0.01;
 
-const byte eepromValidateData = 6;
+const byte eepromValidateData = 1;
 const byte eepromDataAddr = 32;
 
 PID myPID(&position, &motorPower, &targetPositionDouble, Kp, Ki, Kd, DIRECT);
@@ -93,6 +96,7 @@ void setup() {
   pinMode(stepPin, INPUT_PULLUP); 
   pinMode(dirPin, INPUT_PULLUP);
 
+  
   pinMode(ampErrorPin, INPUT); 
 
   ///////////////////////////////////////////////////////
@@ -143,16 +147,26 @@ void loop() {
 
   updateEncoder(); 
 
-  //targetPositionLong = round(((cos((millis()-startOffset) * 0.0008f)) -1) * 1000.0f);
+  //targetPositionLong = round(((cos((millis()-startOffset) * 0.0008f)) -1) * 100.0f);
 
   targetPositionDouble=targetPositionLong; // Copy the integer value updated by the ISR into the float value used by PID
-  myPID.Compute();
+  counter ++; 
+  
+  if(myPID.Compute()){
+    if(counter>33) { // update 30 times a second 
+      // send position over serial
+      Serial.print("POS:"); 
+       Serial.print(targetPositionDouble); 
+       Serial.print(","); 
+       Serial.println(position); 
+       counter = 0; 
+    }
+  }
 
   errorValue = targetPositionDouble - position; 
-  if(errorValue<0) errorValue*=-1;
+  if(errorValue<0) errorValue*=-1; 
 
   
-
   if (!servoError) {
     setMotorPower(motorPower);
     digitalWrite(errorLightPin, LOW);  
@@ -164,7 +178,7 @@ void loop() {
     // this line should flash the red light if we have an amp error or just make it steady on 
     // if it's a normal servo error. Although - does the ampError reset or stay permanently on? 
 
-    if(!digitalRead(ampErrorPin) && (millis()%500<250)) digitalWrite(errorLightPin, LOW);  
+    if(!digitalRead(ampErrorPin) && (millis()%200<100)) digitalWrite(errorLightPin, LOW);  
     else digitalWrite(errorLightPin, HIGH); 
     
   }
@@ -204,6 +218,8 @@ void loop() {
   }
   checkSerial();
   
+  //Serial.println(targetPositionLong);
+  
   //  if((servoError) && (digitalRead(resetPin) == LOW)) {
   //     reset();  
   //  }
@@ -225,11 +241,12 @@ void initialisePID() {
   //encoder.write(0); 
   position = targetPositionDouble = motorPower = 0; 
   targetPositionLong = 0;
-  myPID.SetOutputLimits(-100, 100); // 80% max power
+  myPID.SetOutputLimits(-100, 100); 
   myPID.SetMode(AUTOMATIC);
   myPID.SetSampleTime(1);
   myPID.SetTunings(Kp, Ki, Kd);
   targetPositionLong = targetPositionDouble;
+  sendPIDOverSerial();
 
 
 
