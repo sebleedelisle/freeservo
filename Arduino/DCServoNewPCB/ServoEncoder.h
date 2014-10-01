@@ -1,14 +1,8 @@
 
 #ifdef USE_ENCODER_LIBRARY
-//#define ENCODER_OPTIMIZE_INTERRUPTS
-
-#include <Encoder.h>
-#endif
-
-#ifdef USE_ENCODER_LIBRARY
+#define ENCODER_OPTIMIZE_INTERRUPTS
 
 Encoder encoder(aPin, bPin);
-
 
 void initEncoder() {
 }
