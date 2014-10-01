@@ -1,6 +1,34 @@
+#pragma once
+
+#ifdef USE_SOFT_SERIAL
+#define serial softSerial
+#else
+#defin serial Serial
+#endif
+
+void initSerial(){
+  #ifdef USE_SOFT_SERIAL
+    softSerial.begin(4800);
+  #else
+    while( !Serial );
+    serial.begin(9600);
+  #endif
+}
 
 void checkSerial() {
-
+  if (serial.available()) {
+    // get the new byte:
+    char inChar = (char)serial.read();
+    // add it to the inputString:
+    // if the incoming character is a newline, set a flag
+    // so the main loop can do something about it:
+    if (inChar == '\n') {
+      commandComplete = true;
+    } else {
+      command += inChar;
+    }
+  }
+  
   if ( commandComplete ) {
     char commandStr[command.length() + 1];
     char *ptr;
@@ -34,31 +62,18 @@ void sendPIDOverSerial(){
   
   char buf[12];
   dtostrf( Kp, 12, 8, buf );
-  Serial.print("PID:");
-  Serial.print( buf );
-  Serial.print( ',' );
+  serial.print("PID:");
+  serial.print( buf );
+  serial.print( ',' );
   dtostrf( Ki, 12, 8, buf );
-  Serial.print( buf );
-  Serial.print( ',' );
+  serial.print( buf );
+  serial.print( ',' );
   dtostrf( Kd, 12, 8, buf );
-  Serial.print( buf );
-  Serial.println();
+  serial.print( buf );
+  serial.println();
 
 }
 
 
 
-void serialEvent() {
-  if (Serial.available()) {
-    // get the new byte:
-    char inChar = (char)Serial.read();
-    // add it to the inputString:
-    // if the incoming character is a newline, set a flag
-    // so the main loop can do something about it:
-    if (inChar == '\n') {
-      commandComplete = true;
-    } else {
-      command += inChar;
-    }
-  }
-}
+
