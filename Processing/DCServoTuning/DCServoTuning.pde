@@ -24,7 +24,7 @@ void setup() {
 
     knobKp = cp5.addSlider("Kp")
         .setSize(width-40, 15)
-            .setRange(0.001, 10)
+            .setRange(0.001, 200)
                 .setValue(0.88)
                     .setPosition(20, height - 100)
                         // .setRadius(50)
@@ -33,7 +33,7 @@ void setup() {
 
     knobKi = cp5.addSlider("Ki")
         .setSize(width-40, 15)
-            .setRange(0, 2)
+            .setRange(0, 20)
                 .setValue(0.16)
                     .setPosition(20, height-70)
                         //.setRadius(50)
@@ -42,7 +42,7 @@ void setup() {
 
     knobKd = cp5.addSlider("Kd")
         .setSize(width-40, 15)
-            .setRange(0, 2)
+            .setRange(0, 100)
                 .setValue(0.9)
                     .setPosition(20, height-40)
                         //.setRadius(50)
@@ -122,7 +122,7 @@ void controlEvent(ControlEvent theEvent) {
                 serial.clear();
                 serial.stop();
             }
-            serial = new Serial(this, Serial.list()[value], 9600);
+            serial = new Serial(this, Serial.list()[value], 115200);
         }
         catch(Exception e) {
         }

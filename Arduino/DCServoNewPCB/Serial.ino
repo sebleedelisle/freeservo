@@ -3,7 +3,7 @@
 #ifdef USE_SOFT_SERIAL
 #define serial softSerial
 #else
-#defin serial Serial
+#define serial Serial
 #endif
 
 void initSerial(){
@@ -11,7 +11,7 @@ void initSerial(){
     softSerial.begin(4800);
   #else
     while( !Serial );
-    serial.begin(9600);
+    serial.begin(115200);
   #endif
 }
 
