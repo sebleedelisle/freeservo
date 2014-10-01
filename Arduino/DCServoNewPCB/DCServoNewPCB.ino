@@ -17,9 +17,10 @@
 volatile double position, targetPositionDouble, motorPower, errorValue, maxValue = 10000;
 volatile long targetPositionLong = 0;
 
-#include<stdlib.h>
+#include <stdlib.h>
 #include "constants.h"
-#include "Encoder.h"
+#include <Encoder.h>
+#include "ServoEncoder.h"
 
 
 #include "MotorDrives.h"
