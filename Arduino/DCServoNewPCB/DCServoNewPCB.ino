@@ -31,7 +31,7 @@ const int errorMargin = 512; // the number of ticks out of place before the serv
                              
 int counter = 0; 
 
-bool servoError = false;
+volatile bool servoError = false;
 volatile int stepState = 0; 
 volatile int dirState = 0; 
 
@@ -56,8 +56,9 @@ PID myPID(&position, &motorPower, &targetPositionDouble, Kp, Ki, Kd, DIRECT);
 // Interrupt service routine for pin change interrupt #2
 ISR(PCINT2_vect) 
 {
+  if(servoError) return; 
   register byte copyPortD = PIND; // capture port value asap
-  if(copyPortD & (1<<DBIT_STEP)) // Ensure this is a RISING edge of step pin
+  if(copyPortD & (1<<DBIT_STEP) ) // Ensure this is a RISING edge of step pin
   {
     if(copyPortD & (1<<DBIT_DIR))  // Check the direction pin
       ++targetPositionLong; 
@@ -150,6 +151,21 @@ void loop() {
 
   //targetPositionLong = round(((cos((millis()-startOffset) * 0.0008f)) -1) * 100.0f);
 
+
+  // reset if the numbers get too high!
+//  if(targetPositionLong>maxValue) {
+//    
+//    targetPositionLong-=maxValue; 
+//    targetPositionDouble-=maxValue; 
+//    position-=maxValue; 
+//  }
+//  
+//  if(targetPositionLong<-maxValue) {
+//    targetPositionLong+=maxValue; 
+//    targetPositionDouble+=maxValue; 
+//    position+=maxValue; 
+//  }
+
   targetPositionDouble=targetPositionLong; // Copy the integer value updated by the ISR into the float value used by PID
   counter ++; 
   
@@ -205,18 +221,7 @@ void loop() {
     digitalWrite(okLightPin, LOW);   
   }
 
-  // reset if the numbers get too high!
-  if(targetPositionLong>maxValue) {
-    targetPositionDouble-=maxValue; 
-    targetPositionLong-=maxValue; 
-    position-=maxValue; 
-  }
-  
-  if(targetPositionLong<-maxValue) {
-    targetPositionDouble+=maxValue; 
-    targetPositionLong+=maxValue; 
-    position+=maxValue; 
-  }
+
   checkSerial();
   
   //Serial.println(targetPositionLong);
