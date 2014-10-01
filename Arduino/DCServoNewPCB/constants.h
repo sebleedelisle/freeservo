@@ -3,7 +3,8 @@
 const int errorLightPin = 13; // LED when in error 
 const int warnLightPin = 16;
 const int okLightPin = 17;    // LED when within 256 of where it should be 
-
+const int serialRX = 11;
+const int serialTX = 12;
 const int ampErrorPin = 7; 
 
 // optical encoder

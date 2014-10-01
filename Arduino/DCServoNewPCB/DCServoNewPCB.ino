@@ -5,7 +5,7 @@
 
 #define USE_ENCODER_LIBRARY
 
-
+#define USE_SOFT_SERIAL
 
 #include <EEPROM.h>
 #include "EEPROMAnything.h"
@@ -24,6 +24,12 @@ volatile long targetPositionLong = 0;
 
 
 #include "MotorDrives.h"
+
+
+#ifdef USE_SOFT_SERIAL
+#include <AltSoftSerial.h>
+AltSoftSerial softSerial(serialRX, serialTX); // RX, TX
+#endif
 
 const int warningMargin = 10; 
 const int errorMargin = 512; // the number of ticks out of place before the servo goes
@@ -54,7 +60,7 @@ PID myPID(&position, &motorPower, &targetPositionDouble, Kp, Ki, Kd, DIRECT);
 
 //////////////////////////////////////////////////////////////////////////////////
 // Interrupt service routine for pin change interrupt #2
-ISR(PCINT2_vect) 
+ISR(PCINT2_vect)
 {
   if(servoError) return; 
   register byte copyPortD = PIND; // capture port value asap
@@ -78,10 +84,8 @@ void setup() {
     eepromAddr+=EEPROM_readAnything(eepromAddr,Kd);    
   }
 
-
-  while( !Serial );
-  Serial.begin(115200);
-  sendPIDOverSerial();
+  initSerial();
+  sendPIDOverSerial();  
 
   //TCCR3B &= (0xff & 0x1); // change pwm frequency to 40k or something
   //TCCR4B &= (0xff & 0x1); // change pwm frequency to 40k or something
