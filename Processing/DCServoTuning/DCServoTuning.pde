@@ -149,7 +149,7 @@ void ResendValues() {
     String v1 = String.format("%e", knobKp.getValue());
     String v2 = String.format("%e", knobKi.getValue());
     String v3 = String.format("%e", knobKd.getValue()/kdScale);
-    String v4 = (sendPos.getValue()) ? "1" : "0"; 
+    String v4 = (sendPos.getValue()!=0) ? "1" : "0"; 
     
     String msg = v1 +","+ v2 +","+ v3+","+v4+"\n";  
     print( "Sending: "+msg );

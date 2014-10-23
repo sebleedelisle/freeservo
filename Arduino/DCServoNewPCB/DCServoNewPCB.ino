@@ -254,7 +254,7 @@ void loop() {
 //  }
   
   
- // checkSerial();
+   checkSerial();
   
   //Serial.println(targetPositionLong);
   
