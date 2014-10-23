@@ -1,11 +1,11 @@
 //#define USE_MOTOR_SHIELD
 //#define USE_4_PWM
-//#define USE_2_PWM
-#define USE_ARDUMOTO
+#define USE_2_PWM
+//#define USE_ARDUMOTO
 
 #define USE_ENCODER_LIBRARY
 
-#define USE_SOFT_SERIAL
+//#define USE_SOFT_SERIAL
 
 #include <EEPROM.h>
 #include "EEPROMAnything.h"
@@ -37,7 +37,10 @@ const int errorMargin = 512; // the number of ticks out of place before the serv
                              
 int counter = 0; 
 
+bool sendPos = false; 
+
 volatile bool servoError = false;
+volatile bool initialised = false; 
 volatile int stepState = 0; 
 volatile int dirState = 0; 
 
@@ -46,14 +49,16 @@ long startOffset = 0;
 String command = "";
 boolean commandComplete = false;
 
+
 //double Kp = 0.14, Ki = 0.03, Kd = 0.0002;
 //double Kp = 0.88, Ki = 0.02, Kd = 0.0007;
 //double Kp = 0.77, Ki = 0.37, Kd = 0.0005;
 //double Kp = 0.3, Ki = 0.05, Kd = 0.0003;
-double Kp = 100, Ki = 6, Kd = 0.4;
+//double Kp = 100, Ki = 6, Kd = 0.4;
 //double Kp = 2, Ki = 8, Kd = 0.01;
-
-const byte eepromValidateData = 2;
+double Kp = 15.5, Ki = 5.71, Kd = 0.0184;
+//
+const byte eepromValidateData = 3;
 const byte eepromDataAddr = 32;
 
 PID myPID(&position, &motorPower, &targetPositionDouble, Kp, Ki, Kd, DIRECT);
@@ -62,7 +67,7 @@ PID myPID(&position, &motorPower, &targetPositionDouble, Kp, Ki, Kd, DIRECT);
 // Interrupt service routine for pin change interrupt #2
 ISR(PCINT2_vect)
 {
-  if(servoError) return; 
+  if(servoError | !initialised) return; 
   register byte copyPortD = PIND; // capture port value asap
   if(copyPortD & (1<<DBIT_STEP) ) // Ensure this is a RISING edge of step pin
   {
@@ -76,13 +81,13 @@ ISR(PCINT2_vect)
 void setup() {
 
   command.reserve(256);
-  setPwmFrequency(9, 8);
-  byte eepromAddr = eepromDataAddr;
-  if( EEPROM.read(eepromAddr++)==eepromValidateData ){
-    eepromAddr+=EEPROM_readAnything(eepromAddr,Kp);
-    eepromAddr+=EEPROM_readAnything(eepromAddr,Ki);
-    eepromAddr+=EEPROM_readAnything(eepromAddr,Kd);    
-  }
+  //setPwmFrequency(9, 8);
+//  byte eepromAddr = eepromDataAddr;
+//  if( EEPROM.read(eepromAddr++)==eepromValidateData ){
+//    eepromAddr+=EEPROM_readAnything(eepromAddr,Kp);
+//    eepromAddr+=EEPROM_readAnything(eepromAddr,Ki);
+//    eepromAddr+=EEPROM_readAnything(eepromAddr,Kd);    
+//  }
 
   initSerial();
   sendPIDOverSerial();  
@@ -113,8 +118,8 @@ void setup() {
 
 
   // MAKE TONE ON RESET
-  pinMode(buzzerPin, OUTPUT); 
-  tone(buzzerPin, 1000); 
+  //pinMode(buzzerPin, OUTPUT); 
+  //tone(buzzerPin, 1000); 
 
 
   initMotor();
@@ -144,6 +149,16 @@ void setup() {
   //TCCR1B = TCCR1B & B11111000 | B00000100;    // set timer 1 divisor to   256 for PWM frequency of   122.55 Hz
   //TCCR1B = TCCR1B & B11111000 | B00000101;    // set timer 1 divisor to  1024 for PWM frequency of    30.64 Hz
 
+  for(int i =0 ; i<10; i++) { 
+    bool val = ((i%2) ==0); 
+    digitalWrite(errorLightPin, val); 
+    digitalWrite(warnLightPin, val); 
+    digitalWrite(okLightPin, val); 
+    delay(100); 
+  }
+
+
+  initialised = true; 
 
 
 }
@@ -151,6 +166,10 @@ void setup() {
 
 void loop() {
 
+  //setMotorPower(-50);
+  //return;
+  
+  
   updateEncoder(); 
 
   //targetPositionLong = round(((cos((millis()-startOffset) * 0.0008f)) -1) * 100.0f);
@@ -171,17 +190,20 @@ void loop() {
 //  }
 
   targetPositionDouble=targetPositionLong; // Copy the integer value updated by the ISR into the float value used by PID
-  counter ++; 
+   
   
   if(myPID.Compute()){
     if(counter>33) { // update 30 times a second 
       // send position over serial
-      Serial.print("POS:"); 
-       Serial.print(targetPositionDouble); 
-       Serial.print(","); 
-       Serial.println(position); 
+      if(sendPos) {
+        Serial.print("POS:"); 
+         Serial.print(targetPositionDouble); 
+         Serial.print(","); 
+         Serial.println(position); 
+      }
        counter = 0; 
     }
+    counter ++;
   }
 
   errorValue = targetPositionDouble - position; 
@@ -191,6 +213,7 @@ void loop() {
   if (!servoError) {
     setMotorPower(motorPower);
     digitalWrite(errorLightPin, LOW);  
+    //if(abs(motorPower)<1) digitalWrite(errorLightPin, (millis()%200<100) ? LOW : HIGH); 
     //Serial.println(motorPower); 
   } 
   else {
@@ -225,14 +248,20 @@ void loop() {
     digitalWrite(okLightPin, LOW);   
   }
 
-
-  checkSerial();
+//  if(!digitalRead(ampErrorPin)) {
+//    digitalWrite(okLightPin, HIGH); 
+//    digitalWrite(warnLightPin, HIGH);   
+//  }
+  
+  
+ // checkSerial();
   
   //Serial.println(targetPositionLong);
   
   //  if((servoError) && (digitalRead(resetPin) == LOW)) {
   //     reset();  
   //  }
+  
   
 
 }

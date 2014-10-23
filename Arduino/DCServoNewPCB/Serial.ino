@@ -8,7 +8,7 @@
 
 void initSerial(){
   #ifdef USE_SOFT_SERIAL
-    softSerial.begin(4800);
+    softSerial.begin(9600);
   #else
     while( !Serial );
     serial.begin(115200);
@@ -16,18 +16,7 @@ void initSerial(){
 }
 
 void checkSerial() {
-  if (serial.available()) {
-    // get the new byte:
-    char inChar = (char)serial.read();
-    // add it to the inputString:
-    // if the incoming character is a newline, set a flag
-    // so the main loop can do something about it:
-    if (inChar == '\n') {
-      commandComplete = true;
-    } else {
-      command += inChar;
-    }
-  }
+
   
   if ( commandComplete ) {
     char commandStr[command.length() + 1];
@@ -41,15 +30,17 @@ void checkSerial() {
     ptr++;
     Kd = strtod(ptr, &ptr);
     myPID.SetTunings(Kp, Ki, Kd);
+    
+    ptr++; 
+    sendPos = strtol(ptr, &ptr, 10); 
 
-    byte eepromAddr = eepromDataAddr;
-    EEPROM.write(eepromAddr++,eepromValidateData);
-    eepromAddr+=EEPROM_writeAnything(eepromAddr,Kp);
-    eepromAddr+=EEPROM_writeAnything(eepromAddr,Ki);
-    eepromAddr+=EEPROM_writeAnything(eepromAddr,Kd);    
+//    byte eepromAddr = eepromDataAddr;
+//    EEPROM.write(eepromAddr++,eepromValidateData);
+//    eepromAddr+=EEPROM_writeAnything(eepromAddr,Kp);
+//    eepromAddr+=EEPROM_writeAnything(eepromAddr,Ki);
+//    eepromAddr+=EEPROM_writeAnything(eepromAddr,Kd);    
     //sendPIDOverSerial();
-    //targetPosition = random(0,8000);
-
+ 
     commandComplete = false;
     command = "";
 
@@ -74,6 +65,23 @@ void sendPIDOverSerial(){
 
 }
 
+void incomingSerial() { 
+    if (serial.available()) {
+    // get the new byte:
+    char inChar = (char)serial.read();
+    // add it to the inputString:
+    // if the incoming character is a newline, set a flag
+    // so the main loop can do something about it:
+    if (inChar == '\n') {
+      commandComplete = true;
+    } else {
+      command += inChar;
+    }
+  }
+}
 
+void serialEvent() { 
+  incomingSerial(); 
+}
 
 

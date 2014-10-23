@@ -1,24 +1,29 @@
 #include <AccelStepper.h>
 
-const int stepPin = 12; 
-const int dirPin = 13; 
+const int stepPin = 12;
+const int dirPin = 13;
 
-AccelStepper accel(AccelStepper::DRIVER, stepPin, dirPin); 
+AccelStepper accel(AccelStepper::DRIVER, stepPin, dirPin);
 
-void setup() { 
-    
-    accel.setMaxSpeed(300.0);
-    accel.setAcceleration(300.0);
-    accel.moveTo(-500);
-  
+boolean forwards = false;
+
+
+void setup() {
+
+  accel.setMaxSpeed(200.0);
+  accel.setAcceleration(1000.0);
+  accel.moveTo(1000);
+
 }
 
 
 void loop()  {
-  
+
   if (accel.distanceToGo() == 0) {
-	accel.moveTo(-accel.currentPosition());
-    if(accel.currentPosition()<0) delay(500);
+    forwards = !forwards;
+    if (forwards) accel.move(2050);
+    else accel.move(-50);
+    //if(accel.currentPosition()<0) delay(500);
   }
-    accel.run();
+  accel.run();
 }

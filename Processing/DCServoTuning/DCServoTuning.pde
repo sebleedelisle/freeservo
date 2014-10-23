@@ -10,6 +10,9 @@ int myColorBackground = color(0, 0, 0);
 Slider knobKp;
 Slider knobKi;
 Slider knobKd;
+
+Toggle sendPos; 
+
 boolean supressSerialSend;
 float KiValue = 0;
 float kdScale = 100;
@@ -48,7 +51,9 @@ void setup() {
                         //.setRadius(50)
                         //.setDragDirection(Knob.VERTICAL)
                         ;
-
+    sendPos = cp5.addToggle("send data");
+    
+    
     DropdownList l = cp5.addDropdownList("Select port")
         .setId(0)
             .setPosition(20, 20)
@@ -64,7 +69,7 @@ void draw() {
     background(myColorBackground);
     fill(0);
     rect(0, 0, width, height);
-    if ( serial!=null && serial.available() > 0 ) {
+    while ( serial!=null && serial.available() > 0 ) {
         String message = serial.readStringUntil('\n');
         // String[] parts = message.split(":") ; 
         if ((message!=null) && (message.indexOf(':')>-1)) { 
@@ -92,7 +97,7 @@ void draw() {
                         float target = values[1]; 
                         float error = target-pos; 
                         errors.append(error); 
-                        if(errors.size()>width) errors.remove(0); 
+                        if(errors.size()>width-10) errors.remove(0); 
                     }
                 }
             }
@@ -144,7 +149,9 @@ void ResendValues() {
     String v1 = String.format("%e", knobKp.getValue());
     String v2 = String.format("%e", knobKi.getValue());
     String v3 = String.format("%e", knobKd.getValue()/kdScale);
-    String msg = v1 +","+ v2 +","+ v3+"\n";  
+    String v4 = (sendPos.getValue()) ? "1" : "0"; 
+    
+    String msg = v1 +","+ v2 +","+ v3+","+v4+"\n";  
     print( "Sending: "+msg );
     if ( serial != null ) {
         try {

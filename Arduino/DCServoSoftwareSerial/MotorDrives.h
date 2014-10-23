@@ -1,12 +1,20 @@
 
 #pragma once
 #include "Arduino.h"
-#include "pwm.h"
-
+//#include "pwm.h"
 
 #ifdef USE_2_PWM
 
-// paul's new motor shield on the new PCB. 
+// Paul's motor shield
+// Wiring is easy - wire pins in order straight into pins 2 to 6
+// PWM 1     PWM 0     GND     PWM 3    PWM 2
+//   \/        \/       \/       \/       \/
+//   6          5       4         3       2
+
+
+//const int grdPin = 4;
+
+
 
 
 void initMotor() {
@@ -20,6 +28,8 @@ void initMotor() {
 
 void setMotorPower(volatile double power) {
  // power goes from -100 to 100
+  //setDuty(power);
+
   
   int speed = map(abs(round(power)),0,100,10,240);
 
@@ -51,6 +61,10 @@ void setMotorPower(volatile double power) {
 //   6          5       4         3       2
 
 
+//const int grdPin = 4;
+
+
+
 
 void initMotor() {
 
@@ -74,8 +88,7 @@ void setMotorPower(volatile double power) {
   //setDuty(power);
 
   
-  int speed = 0; 
-  if(round(power)!=0) map(abs(round(power)),0,100,5,240);
+  int speed = map(abs(round(power)),0,100,5,240);
 
   if (power < 0) {
 
@@ -105,26 +118,25 @@ void setMotorPower(volatile double power) {
 #endif
 
 
-#ifdef USE_ARDUMOTO
-//motorPwm =;
-//motorDir
+#ifdef USE_MOTOR_SHIELD
+
+// Arduino Motor Shield control pins for motor A
+const int dirPin = 12;
+const int pwmPin = 3;
 
 void initMotor() {
 
-  pinMode(motorPwm, OUTPUT);
-  pinMode(motorDir, OUTPUT);
-  digitalWrite(motorPwm, 0);
-  digitalWrite(motorDir, 0);
+  pinMode(dirPin, OUTPUT);
+  pinMode(pwmPin, OUTPUT);
+  digitalWrite(pwmPin, 0);
+  digitalWrite(dirPin, 0);
 
 }
 
-void setMotorPower(volatile double power) {
+void setMotorPower(volatile double& power) {
   // motorPower automatically updated by the PID algo
-   int speed = map(abs(round(power)),0,100,10,254);
-  if(round(power) ==0) speed = 0; 
-
-  analogWrite(motorPwm, speed);
-  digitalWrite(motorDir, power > 0 ? HIGH : LOW);
+  analogWrite(pwmPin, abs(round(power)));
+  digitalWrite(dirPin, power < 0 ? HIGH : LOW);
 
 }
 
