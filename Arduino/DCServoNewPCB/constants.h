@@ -6,6 +6,7 @@ const int okLightPin = 17;    // LED when within 256 of where it should be
 const int serialRX = 11;
 const int serialTX = 12;
 const int ampErrorPin = 7; 
+const int motorEnablePin = 6; 
 
 // optical encoder
 const int aPin = 2; // interrupt 3 Port PD1 (vars not actually used any more)
