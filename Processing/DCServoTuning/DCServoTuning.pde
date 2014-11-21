@@ -11,6 +11,8 @@ Slider knobKp;
 Slider knobKi;
 Slider knobKd;
 
+Slider knobDeadZone;
+
 Toggle sendPos; 
 
 boolean supressSerialSend;
@@ -25,28 +27,36 @@ void setup() {
  errors = new FloatList(); 
     cp5 = new ControlP5(this);
 
-    knobKp = cp5.addSlider("Kp")
-        .setSize(width-40, 15)
+    knobKp = cp5.addSlider("P")
+        .setSize(width-80, 15)
             .setRange(0.001, 200)
                 .setValue(0.88)
-                    .setPosition(20, height - 100)
+                    .setPosition(20, height - 130)
                         // .setRadius(50)
                         // .setDragDirection(Knob.VERTICAL)
                         ;
 
-    knobKi = cp5.addSlider("Ki")
-        .setSize(width-40, 15)
+    knobKi = cp5.addSlider("I")
+        .setSize(width-80, 15)
             .setRange(0, 20)
                 .setValue(0.16)
-                    .setPosition(20, height-70)
+                    .setPosition(20, height-100)
                         //.setRadius(50)
                         //.setDragDirection(Knob.VERTICAL)
                         ;
 
-    knobKd = cp5.addSlider("Kd")
-        .setSize(width-40, 15)
+    knobKd = cp5.addSlider("D")
+        .setSize(width-80, 15)
             .setRange(0, 100)
                 .setValue(0.9)
+                    .setPosition(20, height-70)
+                        //.setRadius(50)
+                        //.setDragDirection(Knob.VERTICAL)
+                        ;
+   knobDeadZone = cp5.addSlider("DeadZone")
+        .setSize(width-80, 15)
+            .setRange(0, 0.5)
+                .setValue(0)
                     .setPosition(20, height-40)
                         //.setRadius(50)
                         //.setDragDirection(Knob.VERTICAL)
@@ -80,13 +90,16 @@ void draw() {
          
                 if (( parts.length>1) && (parts[1] != null )) {
                     float[] values = float( parts[1].split(",") );
-                    //println( values );
-                    print( "Setting PID : "+values[0]+" " + values[1] + " " + values[2]* kdScale );
-                    supressSerialSend = true;
-                    knobKp.setValue( values[0] );
-                    knobKi.setValue( values[1] );
-                    knobKd.setValue( values[2] * kdScale );
-                    supressSerialSend = false;
+                    if(values.length==4) { 
+                        //println( values );
+                        print( "Setting PID : "+values[0]+" " + values[1] + " " + values[2]* kdScale + " " + values[3] );
+                        supressSerialSend = true;
+                        knobKp.setValue( values[0] );
+                        knobKi.setValue( values[1] );
+                        knobKd.setValue( values[2] * kdScale );
+                        knobDeadZone.setValue( values[3]  );
+                        supressSerialSend = false;
+                    }
                 }
             } else if (parts[0].equals("POS")) {
                 if (( parts.length>1) && ( parts[1] != null )) {
@@ -134,7 +147,7 @@ void controlEvent(ControlEvent theEvent) {
     }
 
     else {
-        if ( (knobKp == null) || (knobKi == null) || (knobKd == null) ) return; 
+        if ( (knobKp == null) || (knobKi == null) || (knobKd == null)|| (knobDeadZone == null) ) return; 
 
         ResendValues();
     }
@@ -150,9 +163,10 @@ void ResendValues() {
     String v2 = String.format("%e", knobKi.getValue());
     String v3 = String.format("%e", knobKd.getValue()/kdScale);
     String v4 = (sendPos.getValue()!=0) ? "1" : "0"; 
+    String v5 = String.format("%e", knobDeadZone.getValue());
     
-    String msg = v1 +","+ v2 +","+ v3+","+v4+"\n";  
-    print( "Sending: "+msg );
+    String msg = v1 +","+ v2 +","+ v3+","+v4+","+v5+"\n";  
+    println( "Sending: "+msg );
     if ( serial != null ) {
         try {
             serial.write( msg.getBytes() );

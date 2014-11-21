@@ -1,22 +1,17 @@
 #pragma once
 
-#ifdef USE_SOFT_SERIAL
-#define serial softSerial
-#else
 #define serial Serial
-#endif
 
 void initSerial(){
-  #ifdef USE_SOFT_SERIAL
-    softSerial.begin(9600);
-  #else
+ 
     while( !Serial );
     serial.begin(115200);
-  #endif
 }
+
 
 void checkSerial() {
 
+  // TODO - ADD ERROR CHECKING!
   
   if ( commandComplete ) {
     char commandStr[command.length() + 1];
@@ -33,13 +28,13 @@ void checkSerial() {
     
     ptr++; 
     sendPos = strtol(ptr, &ptr, 10); 
+    
+    ptr++;
+    motorDeadZone = strtod(ptr, &ptr);
 
-//    byte eepromAddr = eepromDataAddr;
-//    EEPROM.write(eepromAddr++,eepromValidateData);
-//    eepromAddr+=EEPROM_writeAnything(eepromAddr,Kp);
-//    eepromAddr+=EEPROM_writeAnything(eepromAddr,Ki);
-//    eepromAddr+=EEPROM_writeAnything(eepromAddr,Kd);    
-    //sendPIDOverSerial();
+    writeEepromData(); 
+    
+    sendPIDOverSerial();
  
     commandComplete = false;
     command = "";
@@ -60,6 +55,9 @@ void sendPIDOverSerial(){
   serial.print( buf );
   serial.print( ',' );
   dtostrf( Kd, 12, 8, buf );
+  serial.print( buf );
+  serial.print( ',' );
+  dtostrf( motorDeadZone, 12, 8, buf );
   serial.print( buf );
   serial.println();
 
