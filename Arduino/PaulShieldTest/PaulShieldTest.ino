@@ -10,7 +10,10 @@ const int pwmForward = 9;
 const int pwmBackward = 10; //
 //const int gnd = 4;
 
-double motorPower = 0;
+//-----------------------------------------------
+double motorPower = 10; // MOTOR POWER PERCENTAGE
+//-----------------------------------------------
+
 double motorDeadZone = 0; 
 
 const int motorEnablePin = 6; 
@@ -18,27 +21,9 @@ const int motorEnablePin = 6;
 
 void setup() {
 
-  //---------------------------------------------- Set PWM frequency for D5 & D6 -------------------------------
-  
-//TCCR0B = TCCR0B & B11111000 | B00000001;    // set timer 0 divisor to     1 for PWM frequency of 62500.00 Hz
-//TCCR0B = TCCR0B & B11111000 | B00000010;    // set timer 0 divisor to     8 for PWM frequency of  7812.50 Hz
-//  TCCR0B = TCCR0B & B11111000 | B00000011;    // set timer 0 divisor to    64 for PWM frequency of   976.56 Hz
-//TCCR0B = TCCR0B & B11111000 | B00000100;    // set timer 0 divisor to   256 for PWM frequency of   244.14 Hz
-//TCCR0B = TCCR0B & B11111000 | B00000101;    // set timer 0 divisor to  1024 for PWM frequency of    61.04 Hz
-
-
-//---------------------------------------------- Set PWM frequency for D9 & D10 ------------------------------
-  
-TCCR2B = TCCR2B & B11111000 | B00000001;    // set timer 1 divisor to     1 for PWM frequency of 31372.55 Hz
-//TCCR2B = TCCR2B & B11111000 | B00000010;    // set timer 1 divisor to     8 for PWM frequency of  3921.16 Hz
-//TCCR1B = TCCR1B & B11111000 | B00000011;    // set timer 1 divisor to    64 for PWM frequency of   490.20 Hz
-//TCCR1B = TCCR1B & B11111000 | B00000100;    // set timer 1 divisor to   256 for PWM frequency of   122.55 Hz
-//TCCR1B = TCCR1B & B11111000 | B00000101;    // set timer 1 divisor to  1024 for PWM frequency of    30.64 Hz
-// bitSet(TCCR2B, WGM12); // set Timer 1 to fast mode so as to match 0. 
-  
-//  TCCR3B &= (0xff & 0x2); // change pwm frequency to 40k or something
-//  TCCR4B &= (0xff & 0x2); // change pwm frequency to 40k or something
-
+   // set PWM frequency to 31250
+  setPwmFrequency(9, 1);
+  setPwmFrequency(10, 1);
 
   initMotor(); 
 
@@ -49,7 +34,6 @@ TCCR2B = TCCR2B & B11111000 | B00000001;    // set timer 1 divisor to     1 for 
 void loop() {
 
 
-  motorPower = 10;//sin(millis() / 1000.0f / PI) * 100.0f;
   setMotorPower(motorPower); 
 //  int speed = map(abs(round(motorPower)), 0, 255, 0, 255);
 //
@@ -119,5 +103,39 @@ void setMotorPower(volatile double power) {
      digitalWrite(pwmForward, LOW);
   }
 }
+
+
+//
+void setPwmFrequency(int pin, int divisor) {
+  byte mode;
+  if(pin == 5 || pin == 6 || pin == 9 || pin == 10) {
+    switch(divisor) {
+      case 1: mode = 0x01; break;
+      case 8: mode = 0x02; break;
+      case 64: mode = 0x03; break;
+      case 256: mode = 0x04; break;
+      case 1024: mode = 0x05; break;
+      default: return;
+    }
+    if(pin == 5 || pin == 6) {
+      TCCR0B = TCCR0B & 0b11111000 | mode;
+    } else {
+      TCCR1B = TCCR1B & 0b11111000 | mode;
+    }
+  } else if(pin == 3 || pin == 11) {
+    switch(divisor) {
+      case 1: mode = 0x01; break;
+      case 8: mode = 0x02; break;
+      case 32: mode = 0x03; break;
+      case 64: mode = 0x04; break;
+      case 128: mode = 0x05; break;
+      case 256: mode = 0x06; break;
+      case 1024: mode = 0x7; break;
+      default: return;
+    }
+    TCCR2B = TCCR2B & 0b11111000 | mode;
+  }
+}
+
 
 
