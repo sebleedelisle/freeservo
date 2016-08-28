@@ -1,0 +1,1531 @@
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE  1
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00001 ;This routine dispalys few key parameters on Hyper terminal. 
+                      00002 ;Baud rate set to 9600
+                      00003 ;Parameters displayed can be changed in the main motor control program
+                      00004 ;After debugging, this program can be removed from the motor control project
+                      00005 
+                      00006 ; Author : Padmaraja Yedamale, Microchip Technology Inc
+                      00007 ;Version : 1.0
+                      00008 ;----------------------------------------------------------------
+                      00009 
+                      00010 
+                      00011         include         "P18F2431.inc"
+                      00001         LIST
+                      00002 
+                      00003 ;==========================================================================
+                      00004 ;  MPASM PIC18F2431 processor include
+                      00005 ; 
+                      00006 ;  (c) Copyright 1999-2009 Microchip Technology, All rights reserved
+                      00007 ;==========================================================================
+                      00008 
+                      01340         LIST
+                      00012 
+                      00013 ;----------------------------------------------------------------
+                      00014         UDATA_ACS
+                      00015 
+000000                00016 DISPLAY_TEMP1           res     1               
+000001                00017 DISPLAY_TEMP2           res     1       
+000002                00018 DISPLAY_SPEED_REF       res     1
+000003                00019 DISPLAY_SPEED_ACTH      res     1
+000004                00020 DISPLAY_SPEED_ACTL      res     1
+000005                00021 DISPLAY_CURRENT_Iu      res     1
+000006                00022 DISPLAY_CURRENT_Iv      res     1
+000007                00023 DISPLAY_CURRENT_Iw      res     1
+000008                00024 DISPLAY_MISC_PARAH      res     1
+000009                00025 DISPLAY_MISC_PARAL      res     1
+00000A                00026 DISPLAY_MISC_PARA2H     res     1
+00000B                00027 DISPLAY_MISC_PARA2L     res     1
+00000C                00028 DISPLAY_SFH     res     1
+00000D                00029 DISPLAY_SFL     res     1
+00000E                00030 DISPLAY_SRH     res     1
+00000F                00031 DISPLAY_SRL     res     1
+000010                00032 DISPLAY_EIH     res     1
+000011                00033 DISPLAY_EIL     res     1
+000012                00034 DISPLAY_EOH     res     1
+000013                00035 DISPLAY_EOL     res     1
+000014                00036 DISPLAY_EOLL    res     1
+                      00037 
+                      00038 
+000015                00039 DISPALY_CAP1_H  res     1
+000016                00040 DISPALY_CAP1_L  res     1
+000017                00041 DISPALY_CAP2_H  res     1
+000018                00042 DISPALY_CAP2_L  res     1
+000019                00043 DISPALY_CAP3_H  res     1
+00001A                00044 DISPALY_CAP3_L  res     1
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE  2
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00045 
+                      00046 ;----------------------------------------------------------------
+  0000                00047         GLOBAL  DISPLAY_SPEED_REF       
+  0000                00048         GLOBAL  DISPLAY_SPEED_ACTH      
+  0000                00049         GLOBAL  DISPLAY_SPEED_ACTL
+  0000                00050         GLOBAL  DISPLAY_CURRENT_Iu      
+  0000                00051         GLOBAL  DISPLAY_CURRENT_Iv      
+  0000                00052         GLOBAL  DISPLAY_CURRENT_Iw      
+  0000                00053         GLOBAL  DISPLAY_MISC_PARAH
+  0000                00054         GLOBAL  DISPLAY_MISC_PARAL
+  0000                00055         GLOBAL  DISPLAY_MISC_PARA2H
+  0000                00056         GLOBAL  DISPLAY_MISC_PARA2L
+                      00057         
+  0000                00058         GLOBAL  DISPLAY_SFH
+  0000                00059         GLOBAL  DISPLAY_SFL
+  0000                00060         GLOBAL  DISPLAY_SRH
+  0000                00061         GLOBAL  DISPLAY_SRL
+  0000                00062         GLOBAL  DISPLAY_EIH
+  0000                00063         GLOBAL  DISPLAY_EIL
+  0000                00064         GLOBAL  DISPLAY_EOH
+  0000                00065         GLOBAL  DISPLAY_EOL
+  0000                00066         GLOBAL  DISPLAY_EOLL
+                      00067 
+  0000                00068         GLOBAL  DISPALY_CAP1_H
+  0000                00069         GLOBAL  DISPALY_CAP1_L
+  0000                00070         GLOBAL  DISPALY_CAP2_H
+  0000                00071         GLOBAL  DISPALY_CAP2_L
+  0000                00072         GLOBAL  DISPALY_CAP3_H
+  0000                00073         GLOBAL  DISPALY_CAP3_L
+                      00074 
+                      00075 ;----------------------------------------------------------------
+  0000                00076         GLOBAL  WELCOME_MESSAGE 
+  0000                00077         GLOBAL  SEND_BYTE_FROM_WREG
+  0000                00078         GLOBAL  INITIALIZE_SERIAL_PORT
+  0000                00079         GLOBAL  DISPLAY_PARAMETERS
+                      00080 ;*******************************************************************************
+                      00081 PRG1 code
+                      00082 ;*******************************************************************
+                      00083 ;This routine initializes USART parameters 
+                      00084 ;******************************************************************
+000000                00085 INITIALIZE_SERIAL_PORT
+                      00086 
+000000 0E81           00087         movlw   0x81            ;Baudrate = 9600
+000002 6EAF           00088         movwf   SPBRG
+                      00089         
+000004 0E24           00090         movlw   0x24            ;8-bit transmission;Enable Transmission;        
+000006 6EAC           00091         movwf   TXSTA           ;Asynchronous mode with High speed transmission
+                      00092         
+000008 0E90           00093         movlw   0x90            ;Enable the serial port
+00000A 6EAB           00094         movwf   RCSTA           ;with 8-bit continuous reception
+                      00095 
+00000C 9C94           00096         bcf     TRISC,6
+00000E 8E94           00097         bsf     TRISC,7
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE  3
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00098 
+000010 0012           00099         return
+                      00100 
+                      00101 
+                      00102 ;*******************************************************************************
+                      00103 ;This routine loads the data in Wreg to Transmission register(TXREG) after checking
+                      00104 ;of completion of previously loaded byte transmission
+                      00105 ;*******************************************************************************
+000012                00106 SEND_BYTE_FROM_WREG
+000012 A89E           00107         btfss   PIR1,TXIF
+000014 EF?? F???      00108         goto    SEND_BYTE_FROM_WREG
+000018 6EAD           00109         movwf   TXREG
+00001A 0012           00110         return
+                      00111 
+                      00112 ;*******************************************************************************
+                      00113 ;This routine intializes the USART module to communicate with host PC and displays 
+                      00114 ;a welcome message on the screen
+                      00115 ;*******************************************************************************
+00001C                00116 WELCOME_MESSAGE
+00001C 0E??           00117         movlw   UPPER WELCOME_TABLE     ;Initialize Table pointer to the first  
+00001E 6EF8           00118         movwf   TBLPTRU                         ;location of the table
+000020 0E??           00119         movlw   HIGH WELCOME_TABLE
+000022 6EF7           00120         movwf   TBLPTRH
+000024 0E??           00121         movlw   LOW WELCOME_TABLE
+000026 6EF6           00122         movwf   TBLPTRL
+000028                00123 SEND_NEXT_W1
+000028 0009           00124         TBLRD*+
+00002A 50F5           00125         movf    TABLAT,W
+00002C B4D8           00126         btfsc   STATUS,Z
+00002E 0012           00127         return
+000030 EC?? F???      00128         call    SEND_BYTE_FROM_WREG
+000034 D???           00129         bra             SEND_NEXT_W1    
+                      00130 
+000036                00131 WELCOME_TABLE ;BLDC Motor Control
+000036 0D0A 4C42 4344 00132         db      0xA,0xD,0x42,0x4C,0x44,0x43,0x20,0x4D,0x6F,0x74,0x6F,0x72,0x20,0x43,0x6F,0x6E,0x74,0x72,
+                            0x6F,0x6C,0x0A,0x0D,0x00
+       4D20 746F 726F 
+       4320 6E6F 7274 
+       6C6F 0D0A 0000 
+                      00133 ;*******************************************************************************
+00004E                00134 DISPLAY_PARAMETERS
+00004E EC?? F???      00135         call    PARAMETER_ZERO
+000052 C??? F???      00136         movff   DISPLAY_SPEED_REF,DISPLAY_TEMP1
+000056 EC?? F???      00137         call    DISPLAY_DIGITS
+00005A EC?? F???      00138         call    PARAMETER_ONE
+00005E C??? F???      00139         movff   DISPLAY_CURRENT_Iu,DISPLAY_TEMP1
+000062 EC?? F???      00140         call    DISPLAY_DIGITS
+000066 EC?? F???      00141         call    PARAMETER_TWO
+00006A C??? F???      00142         movff   DISPALY_CAP1_H,DISPLAY_TEMP1
+00006E EC?? F???      00143         call    DISPLAY_DIGITS
+000072 C??? F???      00144         movff   DISPALY_CAP1_L,DISPLAY_TEMP1
+000076 EC?? F???      00145         call    DISPLAY_DIGITS
+00007A EC?? F???      00146         call    PARAMETER_THREE
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE  4
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00007E C??? F???      00147         movff   DISPALY_CAP2_H,DISPLAY_TEMP1
+000082 EC?? F???      00148         call    DISPLAY_DIGITS
+000086 C??? F???      00149         movff   DISPALY_CAP2_L,DISPLAY_TEMP1
+00008A EC?? F???      00150         call    DISPLAY_DIGITS
+00008E EC?? F???      00151         call    PARAMETER_FOUR
+000092 C??? F???      00152         movff   DISPALY_CAP3_H,DISPLAY_TEMP1
+000096 EC?? F???      00153         call    DISPLAY_DIGITS
+00009A C??? F???      00154         movff   DISPALY_CAP3_L,DISPLAY_TEMP1
+00009E EC?? F???      00155         call    DISPLAY_DIGITS
+0000A2 0012           00156         return
+                      00157 
+0000A4 EC?? F???      00158         call    PARAMETER_FIVE
+0000A8 C??? F???      00159         movff   DISPLAY_CURRENT_Iv,DISPLAY_TEMP1
+0000AC EC?? F???      00160         call    DISPLAY_DIGITS  
+0000B0 EC?? F???      00161         call    PARAMETER_SIX
+0000B4 C??? F???      00162         movff   DISPLAY_CURRENT_Iw,DISPLAY_TEMP1
+0000B8 EC?? F???      00163         call    DISPLAY_DIGITS  
+                      00164 ;       call    PARAMETER_SEVEN
+                      00165 ;       movff   DISPLAY_MISC_PARAH,DISPLAY_TEMP1
+                      00166 ;       call    DISPLAY_DIGITS  
+                      00167 ;       movff   DISPLAY_MISC_PARAL,DISPLAY_TEMP1
+                      00168 ;       call    DISPLAY_DIGITS  
+                      00169 ;       call    PARAMETER_EIGHT
+                      00170 ;       movff   DISPLAY_MISC_PARA2H,DISPLAY_TEMP1
+                      00171 ;       call    DISPLAY_DIGITS  
+                      00172 ;       movff   DISPLAY_MISC_PARA2L,DISPLAY_TEMP1
+                      00173 ;       call    DISPLAY_DIGITS  
+                      00174 
+0000BC EC?? F???      00175         call    PARAMETER_SEVEN
+0000C0 C??? F???      00176         movff   DISPLAY_SRH,DISPLAY_TEMP1
+0000C4 EC?? F???      00177         call    DISPLAY_DIGITS  
+0000C8 C??? F???      00178         movff   DISPLAY_SRL,DISPLAY_TEMP1
+0000CC EC?? F???      00179         call    DISPLAY_DIGITS
+                      00180                 
+0000D0 EC?? F???      00181         call    PARAMETER_EIGHT
+0000D4 C??? F???      00182         movff   DISPLAY_SFH,DISPLAY_TEMP1
+0000D8 EC?? F???      00183         call    DISPLAY_DIGITS  
+0000DC C??? F???      00184         movff   DISPLAY_SFL,DISPLAY_TEMP1
+0000E0 EC?? F???      00185         call    DISPLAY_DIGITS  
+                      00186         
+0000E4 EC?? F???      00187         call    PARAMETER_NINE
+0000E8 C??? F???      00188         movff   DISPLAY_EIH,DISPLAY_TEMP1
+0000EC EC?? F???      00189         call    DISPLAY_DIGITS  
+0000F0 C??? F???      00190         movff   DISPLAY_EIL,DISPLAY_TEMP1
+0000F4 EC?? F???      00191         call    DISPLAY_DIGITS  
+                      00192         
+0000F8 EC?? F???      00193         call    PARAMETER_TEN
+0000FC C??? F???      00194         movff   DISPLAY_EOH,DISPLAY_TEMP1
+000100 EC?? F???      00195         call    DISPLAY_DIGITS  
+000104 C??? F???      00196         movff   DISPLAY_EOL,DISPLAY_TEMP1
+000108 EC?? F???      00197         call    DISPLAY_DIGITS  
+00010C C??? F???      00198         movff   DISPLAY_EOLL,DISPLAY_TEMP1
+000110 EC?? F???      00199         call    DISPLAY_DIGITS  
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE  5
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000114 0012           00200         return
+                      00201 
+                      00202 ;******************************************************************************
+                      00203 ;Speed referance display : SpeedRef= 
+000116                00204 PARAMETER_ZERO
+000116 0E??           00205         movlw   UPPER PARAMETER_0       ;Initialize Table pointer to the first  
+000118 6EF8           00206         movwf   TBLPTRU                         ;location of the table
+00011A 0E??           00207         movlw   HIGH PARAMETER_0
+00011C 6EF7           00208         movwf   TBLPTRH
+00011E 0E??           00209         movlw   LOW PARAMETER_0
+000120 6EF6           00210         movwf   TBLPTRL
+000122                00211 SEND_NEXT_P0
+000122 0009           00212         TBLRD*+
+000124 50F5           00213         movf    TABLAT,W
+000126 B4D8           00214         btfsc   STATUS,Z
+000128 0012           00215         return
+00012A EC?? F???      00216         call    SEND_BYTE_FROM_WREG
+00012E D???           00217         bra             SEND_NEXT_P0    
+                      00218 
+000130                00219 PARAMETER_0     ;       SpeedRef= 
+000130 0A0A 530D 6570 00220         db      0xA,0xA,0xD,0x53,0x70,0x65,0x65,0x64,0x52,0x65,0x66,0x3D,0x20,0x00
+       6465 6552 3D66 
+       0020 
+                      00221 ;*******************************************************************************
+                      00222 ;Actual Speed display : Motor Current= 
+00013E                00223 PARAMETER_ONE
+00013E 0E??           00224         movlw   UPPER PARAMETER_1       ;Initialize Table pointer to the first  
+000140 6EF8           00225         movwf   TBLPTRU                         ;location of the table
+000142 0E??           00226         movlw   HIGH PARAMETER_1
+000144 6EF7           00227         movwf   TBLPTRH
+000146 0E??           00228         movlw   LOW PARAMETER_1
+000148 6EF6           00229         movwf   TBLPTRL
+00014A                00230 SEND_NEXT_P1
+00014A 0009           00231         TBLRD*+
+00014C 50F5           00232         movf    TABLAT,W
+00014E B4D8           00233         btfsc   STATUS,Z
+000150 0012           00234         return
+000152 EC?? F???      00235         call    SEND_BYTE_FROM_WREG
+000156 D???           00236         bra             SEND_NEXT_P1
+                      00237 
+000158                00238 PARAMETER_1     ;       MotorI = 
+000158 0D0A 6F4D 6F74 00239         db      0xA,0xD,0x4D,0x6F,0x74,0x6F,0x72,0x20,0x49,0x3D,0x20,0x00
+       2072 3D49 0020 
+                      00240         
+                      00241 ;*******************************************************************************
+                      00242 ;Ref motor direction : Direction Command :  
+000164                00243 PARAMETER_TWO
+000164 0E??           00244         movlw   UPPER PARAMETER_2       ;Initialize Table pointer to the first  
+000166 6EF8           00245         movwf   TBLPTRU                         ;location of the table
+000168 0E??           00246         movlw   HIGH PARAMETER_2
+00016A 6EF7           00247         movwf   TBLPTRH
+00016C 0E??           00248         movlw   LOW PARAMETER_2
+00016E 6EF6           00249         movwf   TBLPTRL
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE  6
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000170                00250 SEND_NEXT_P2
+000170 0009           00251         TBLRD*+
+000172 50F5           00252         movf    TABLAT,W
+000174 B4D8           00253         btfsc   STATUS,Z
+000176 0012           00254         return
+000178 EC?? F???      00255         call    SEND_BYTE_FROM_WREG
+00017C D???           00256         bra             SEND_NEXT_P2
+                      00257 
+00017E                00258 PARAMETER_2     ;       IC1 :  
+00017E 0D0A 4349 3A31 00259         db      0xA,0xD,0x49,0x43,0x31,0x3a,0x00
+       0000 
+                      00260                 
+                      00261 ;*******************************************************************************
+                      00262 ;Actual motor direction : Direction Act :  
+000186                00263 PARAMETER_THREE
+000186 0E??           00264         movlw   UPPER PARAMETER_3       ;Initialize Table pointer to the first  
+000188 6EF8           00265         movwf   TBLPTRU                         ;location of the table
+00018A 0E??           00266         movlw   HIGH PARAMETER_3
+00018C 6EF7           00267         movwf   TBLPTRH
+00018E 0E??           00268         movlw   LOW PARAMETER_3
+000190 6EF6           00269         movwf   TBLPTRL
+000192                00270 SEND_NEXT_P3
+000192 0009           00271         TBLRD*+
+000194 50F5           00272         movf    TABLAT,W
+000196 B4D8           00273         btfsc   STATUS,Z
+000198 0012           00274         return
+00019A EC?? F???      00275         call    SEND_BYTE_FROM_WREG
+00019E D???           00276         bra             SEND_NEXT_P3
+                      00277 
+0001A0                00278 PARAMETER_3     ;       IC2 :  
+0001A0 0D0A 4349 3A32 00279         db      0xA,0xD,0x49,0x43,0x32,0x3a,0x00
+       0000 
+                      00280 ;*******************************************************************************
+                      00281 ;Motor Current Phase U : Current U =   
+0001A8                00282 PARAMETER_FOUR
+0001A8 0E??           00283         movlw   UPPER PARAMETER_4       ;Initialize Table pointer to the first  
+0001AA 6EF8           00284         movwf   TBLPTRU                         ;location of the table
+0001AC 0E??           00285         movlw   HIGH PARAMETER_4
+0001AE 6EF7           00286         movwf   TBLPTRH
+0001B0 0E??           00287         movlw   LOW PARAMETER_4
+0001B2 6EF6           00288         movwf   TBLPTRL
+0001B4                00289 SEND_NEXT_P4
+0001B4 0009           00290         TBLRD*+
+0001B6 50F5           00291         movf    TABLAT,W
+0001B8 B4D8           00292         btfsc   STATUS,Z
+0001BA 0012           00293         return
+0001BC EC?? F???      00294         call    SEND_BYTE_FROM_WREG
+0001C0 D???           00295         bra             SEND_NEXT_P4
+                      00296 
+0001C2                00297 PARAMETER_4     ;               IC3 :  
+0001C2 0D0A 4349 3A33 00298         db      0xA,0xD,0x49,0x43,0x33,0x3a,0x00
+       0000 
+                      00299 ;*******************************************************************************
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE  7
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00300 ;Motor Current Phase V : Current V =   
+0001CA                00301 PARAMETER_FIVE
+0001CA 0E??           00302         movlw   UPPER PARAMETER_5       ;Initialize Table pointer to the first  
+0001CC 6EF8           00303         movwf   TBLPTRU                         ;location of the table
+0001CE 0E??           00304         movlw   HIGH PARAMETER_5
+0001D0 6EF7           00305         movwf   TBLPTRH
+0001D2 0E??           00306         movlw   LOW PARAMETER_5
+0001D4 6EF6           00307         movwf   TBLPTRL
+0001D6                00308 SEND_NEXT_P5
+0001D6 0009           00309         TBLRD*+
+0001D8 50F5           00310         movf    TABLAT,W
+0001DA B4D8           00311         btfsc   STATUS,Z
+0001DC 0012           00312         return
+0001DE EC?? F???      00313         call    SEND_BYTE_FROM_WREG
+0001E2 D???           00314         bra             SEND_NEXT_P5
+                      00315 
+0001E4                00316 PARAMETER_5     ;       Current V =   
+0001E4 0D0A 7543 7272 00317         db      0xA,0xD,0x43,0x75,0x72,0x72,0x65,0x6e,0x74,0x20,0x56,0x20,0x3d,0x20,0x00
+       6E65 2074 2056 
+       203D 0000 
+                      00318 ;*******************************************************************************
+                      00319 ;Motor Current Phase W : Current W =   
+0001F4                00320 PARAMETER_SIX
+0001F4 0E??           00321         movlw   UPPER PARAMETER_6       ;Initialize Table pointer to the first  
+0001F6 6EF8           00322         movwf   TBLPTRU                         ;location of the table
+0001F8 0E??           00323         movlw   HIGH PARAMETER_6
+0001FA 6EF7           00324         movwf   TBLPTRH
+0001FC 0E??           00325         movlw   LOW PARAMETER_6
+0001FE 6EF6           00326         movwf   TBLPTRL
+000200                00327 SEND_NEXT_P6
+000200 0009           00328         TBLRD*+
+000202 50F5           00329         movf    TABLAT,W
+000204 B4D8           00330         btfsc   STATUS,Z
+000206 0012           00331         return
+000208 EC?? F???      00332         call    SEND_BYTE_FROM_WREG
+00020C D???           00333         bra             SEND_NEXT_P6
+                      00334 
+00020E                00335 PARAMETER_6     ;       Current W =   
+00020E 0D0A 7543 7272 00336         db      0xA,0xD,0x43,0x75,0x72,0x72,0x65,0x6e,0x74,0x20,0x57,0x20,0x3d,0x20,0x00
+       6E65 2074 2057 
+       203D 0000 
+                      00337 
+                      00338 ;*******************************************************************************
+                      00339 ;Misc display: ParaX = (SR)  
+00021E                00340 PARAMETER_SEVEN
+00021E 0E??           00341         movlw   UPPER PARAMETER_7       ;Initialize Table pointer to the first  
+000220 6EF8           00342         movwf   TBLPTRU                         ;location of the table
+000222 0E??           00343         movlw   HIGH PARAMETER_7
+000224 6EF7           00344         movwf   TBLPTRH
+000226 0E??           00345         movlw   LOW PARAMETER_7
+000228 6EF6           00346         movwf   TBLPTRL
+00022A                00347 SEND_NEXT_P7
+00022A 0009           00348         TBLRD*+
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE  8
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00022C 50F5           00349         movf    TABLAT,W
+00022E B4D8           00350         btfsc   STATUS,Z
+000230 0012           00351         return
+000232 EC?? F???      00352         call    SEND_BYTE_FROM_WREG
+000236 D???           00353         bra             SEND_NEXT_P7
+                      00354 
+000238                00355 PARAMETER_7     ;       ParaX = 
+                      00356 ;       db      0xA,0xD,0x50,0x61,0x72,0x61,0x58,0x20,0x3d,0x20,0x00
+000238 0D0A 5253 0000 00357         db      0xA,0xD,0x53,0x52,0x00
+                      00358 
+                      00359 ;*******************************************************************************
+                      00360 ;Misc display: ParaX2 =  (SF) 
+00023E                00361 PARAMETER_EIGHT
+00023E 0E??           00362         movlw   UPPER PARAMETER_8       ;Initialize Table pointer to the first  
+000240 6EF8           00363         movwf   TBLPTRU                         ;location of the table
+000242 0E??           00364         movlw   HIGH PARAMETER_8
+000244 6EF7           00365         movwf   TBLPTRH
+000246 0E??           00366         movlw   LOW PARAMETER_8
+000248 6EF6           00367         movwf   TBLPTRL
+00024A                00368 SEND_NEXT_P8
+00024A 0009           00369         TBLRD*+
+00024C 50F5           00370         movf    TABLAT,W
+00024E B4D8           00371         btfsc   STATUS,Z
+000250 0012           00372         return
+000252 EC?? F???      00373         call    SEND_BYTE_FROM_WREG
+000256 D???           00374         bra             SEND_NEXT_P8
+                      00375 
+000258                00376 PARAMETER_8     ;       ParaX2= 
+                      00377 ;       db      0xA,0xD,0x50,0x61,0x72,0x61,0x58,0x32,0x20,0x3d,0x20,0x00
+000258 0D0A 4653 0000 00378         db      0xA,0xD,0x53,0x46,0x00
+                      00379 
+                      00380 ;*******************************************************************************
+                      00381 ;Misc display: ParaX3 =  (EI) 
+00025E                00382 PARAMETER_NINE
+00025E 0E??           00383         movlw   UPPER PARAMETER_9       ;Initialize Table pointer to the first  
+000260 6EF8           00384         movwf   TBLPTRU                         ;location of the table
+000262 0E??           00385         movlw   HIGH PARAMETER_9
+000264 6EF7           00386         movwf   TBLPTRH
+000266 0E??           00387         movlw   LOW PARAMETER_9
+000268 6EF6           00388         movwf   TBLPTRL
+00026A                00389 SEND_NEXT_P9
+00026A 0009           00390         TBLRD*+
+00026C 50F5           00391         movf    TABLAT,W
+00026E B4D8           00392         btfsc   STATUS,Z
+000270 0012           00393         return
+000272 EC?? F???      00394         call    SEND_BYTE_FROM_WREG
+000276 D???           00395         bra             SEND_NEXT_P9
+                      00396 
+000278                00397 PARAMETER_9     ;       ParaX2= 
+                      00398 ;       db      0xA,0xD,0x50,0x61,0x72,0x61,0x58,0x32,0x20,0x3d,0x20,0x00
+000278 0D0A 4945 0000 00399         db      0xA,0xD,0x45,0x49,0x00
+                      00400         
+                      00401 ;*******************************************************************************
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE  9
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00402 ;Misc display: ParaX2 =  (EO) 
+00027E                00403 PARAMETER_TEN
+00027E 0E??           00404         movlw   UPPER PARAMETER_10      ;Initialize Table pointer to the first  
+000280 6EF8           00405         movwf   TBLPTRU                         ;location of the table
+000282 0E??           00406         movlw   HIGH PARAMETER_10
+000284 6EF7           00407         movwf   TBLPTRH
+000286 0E??           00408         movlw   LOW PARAMETER_10
+000288 6EF6           00409         movwf   TBLPTRL
+00028A                00410 SEND_NEXT_P10
+00028A 0009           00411         TBLRD*+
+00028C 50F5           00412         movf    TABLAT,W
+00028E B4D8           00413         btfsc   STATUS,Z
+000290 0012           00414         return
+000292 EC?? F???      00415         call    SEND_BYTE_FROM_WREG
+000296 D???           00416         bra             SEND_NEXT_P10
+                      00417 
+000298                00418 PARAMETER_10    ;       ParaX2= 
+                      00419 ;       db      0xA,0xD,0x50,0x61,0x72,0x61,0x58,0x32,0x20,0x3d,0x20,0x00
+000298 0D0A 4F45 0000 00420         db      0xA,0xD,0x45,0x4F,0x00  
+                      00421 ;*******************************************************************************
+                      00422 ;Display: FORWARD   
+00029E                00423 DISPLAY_FORWARD
+00029E 0E??           00424         movlw   UPPER DISP_FORWARD      ;Initialize Table pointer to the first  
+0002A0 6EF8           00425         movwf   TBLPTRU                         ;location of the table
+0002A2 0E??           00426         movlw   HIGH DISP_FORWARD
+0002A4 6EF7           00427         movwf   TBLPTRH
+0002A6 0E??           00428         movlw   LOW DISP_FORWARD
+0002A8 6EF6           00429         movwf   TBLPTRL
+0002AA                00430 SEND_NEXT_FWD
+0002AA 0009           00431         TBLRD*+
+0002AC 50F5           00432         movf    TABLAT,W
+0002AE B4D8           00433         btfsc   STATUS,Z
+0002B0 0012           00434         return
+0002B2 EC?? F???      00435         call    SEND_BYTE_FROM_WREG
+0002B6 D???           00436         bra             SEND_NEXT_FWD
+                      00437 
+0002B8                00438 DISP_FORWARD    ;       FORWARD 
+0002B8 4F46 5752 5241 00439         db      0x46,0x4F,0x52,0x57,0x41,0x52,0x44,0x00                                 
+       0044 
+                      00440 ;*******************************************************************************
+                      00441 ;Display: REVERSE   
+0002C0                00442 DISPLAY_REVERSE   
+0002C0 0E??           00443         movlw   UPPER DISP_REVERSE      ;Initialize Table pointer to the first  
+0002C2 6EF8           00444         movwf   TBLPTRU                         ;location of the table
+0002C4 0E??           00445         movlw   HIGH DISP_REVERSE   
+0002C6 6EF7           00446         movwf   TBLPTRH
+0002C8 0E??           00447         movlw   LOW DISP_REVERSE   
+0002CA 6EF6           00448         movwf   TBLPTRL
+0002CC                00449 SEND_NEXT_REVERSE   
+0002CC 0009           00450         TBLRD*+
+0002CE 50F5           00451         movf    TABLAT,W
+0002D0 B4D8           00452         btfsc   STATUS,Z
+0002D2 0012           00453         return
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 10
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0002D4 EC?? F???      00454         call    SEND_BYTE_FROM_WREG
+0002D8 D???           00455         bra             SEND_NEXT_REVERSE   
+                      00456 
+0002DA                00457 DISP_REVERSE     
+0002DA 4552 4556 5352 00458         db      0x52,0x45,0x56,0x45,0x52,0x53,0x45,0x00         
+       0045 
+                      00459 ;---------------------------------------------------------
+0002E2                00460 DISPLAY_DIGITS
+0002E2 50??           00461         movf    DISPLAY_TEMP1,W
+0002E4 0BF0           00462         andlw   0xF0
+0002E6 38E8           00463         swapf   WREG,W
+0002E8 0F30           00464         addlw   0x30    
+0002EA EC?? F???      00465         call    CHECK_39
+0002EE EC?? F???      00466         call    SEND_BYTE_FROM_WREG
+0002F2 50??           00467         movf    DISPLAY_TEMP1,W
+0002F4 0B0F           00468         andlw   0x0F
+0002F6 0F30           00469         addlw   0x30    
+0002F8 EC?? F???      00470         call    CHECK_39
+0002FC EC?? F???      00471         call    SEND_BYTE_FROM_WREG
+000300 0012           00472         RETURN
+                      00473 ;------------------------------
+000302                00474 CHECK_39
+000302 6E??           00475         movwf   DISPLAY_TEMP2
+000304 0E39           00476         movlw   0x39
+000306 64??           00477         cpfsgt  DISPLAY_TEMP2
+000308 D???           00478         bra             LESS_39
+00030A 50??           00479         movf    DISPLAY_TEMP2,W
+00030C 0F07           00480         addlw   0x7
+00030E 0012           00481         return
+000310                00482 LESS_39
+000310 50??           00483         movf    DISPLAY_TEMP2,W
+000312 0012           00484         return
+                      00485                 
+                      00486         end
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 11
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+A                                 00000000
+ABDEN                             00000000
+ACCESS                            00000000
+ACMOD0                            00000002
+ACMOD1                            00000003
+ACONV                             00000005
+ACQT0                             00000003
+ACQT1                             00000004
+ACQT2                             00000005
+ACQT3                             00000006
+ACSCH                             00000004
+ADCHS                             00000F99
+ADCON0                            00000FC2
+ADCON1                            00000FC1
+ADCON2                            00000FC0
+ADCON3                            00000F9A
+ADCS0                             00000000
+ADCS1                             00000001
+ADCS2                             00000002
+ADEN                              00000003
+ADFM                              00000007
+ADIE                              00000006
+ADIF                              00000006
+ADIP                              00000006
+ADON                              00000000
+ADPNT0                            00000000
+ADPNT1                            00000001
+ADRES                             00000FC3
+ADRESH                            00000FC4
+ADRESL                            00000FC3
+ADRS0                             00000006
+ADRS1                             00000007
+AN0                               00000000
+AN1                               00000001
+AN2                               00000002
+AN3                               00000003
+AN4                               00000005
+ANS0                              00000000
+ANS1                              00000001
+ANS2                              00000002
+ANS3                              00000003
+ANS4                              00000004
+ANSEL0                            00000FB8
+BANKED                            00000001
+BAUDCON                           00000FAA
+BAUDCTL                           00000FAA
+BF                                00000000
+BFEMT                             00000003
+BFOVFL                            00000002
+BOR                               00000000
+BRFEN                             00000007
+BRG16                             00000003
+BRGH                              00000002
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 12
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+BSR                               00000FE0
+C                                 00000000
+CAP1BUFH                          00000F69
+CAP1BUFL                          00000F68
+CAP1CON                           00000F63
+CAP1M0                            00000000
+CAP1M1                            00000001
+CAP1M2                            00000002
+CAP1M3                            00000003
+CAP1REN                           00000006
+CAP1TMR                           00000005
+CAP2BUFH                          00000F67
+CAP2BUFL                          00000F66
+CAP2CON                           00000F62
+CAP2M0                            00000000
+CAP2M1                            00000001
+CAP2M2                            00000002
+CAP2M3                            00000003
+CAP2REN                           00000006
+CAP2TMR                           00000005
+CAP3BUFH                          00000F65
+CAP3BUFL                          00000F64
+CAP3CON                           00000F61
+CAP3M0                            00000000
+CAP3M1                            00000001
+CAP3M2                            00000002
+CAP3M3                            00000003
+CAP3REN                           00000006
+CAP3TMR                           00000005
+CCP1                              00000002
+CCP1CON                           00000FBD
+CCP1IE                            00000002
+CCP1IF                            00000002
+CCP1IP                            00000002
+CCP1M0                            00000000
+CCP1M1                            00000001
+CCP1M2                            00000002
+CCP1M3                            00000003
+CCP1X                             00000005
+CCP1Y                             00000004
+CCP2                              00000001
+CCP2CON                           00000FBA
+CCP2IE                            00000000
+CCP2IF                            00000000
+CCP2IP                            00000000
+CCP2M0                            00000000
+CCP2M1                            00000001
+CCP2M2                            00000002
+CCP2M3                            00000003
+CCP2X                             00000005
+CCP2Y                             00000004
+CCPR1                             00000FBE
+CCPR1H                            00000FBF
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 13
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+CCPR1L                            00000FBE
+CCPR2                             00000FBB
+CCPR2H                            00000FBC
+CCPR2L                            00000FBB
+CFGS                              00000006
+CHECK_39                          00000302
+CK                                00000006
+CKE                               00000006
+CKP                               00000004
+CLKO                              00000006
+CREN                              00000004
+CSRC                              00000007
+D                                 00000005
+DATA_ADDRESS                      00000005
+DC                                00000001
+DC1B0                             00000004
+DC1B1                             00000005
+DC2B0                             00000004
+DC2B1                             00000005
+DDRA                              TRISA
+DDRB                              TRISB
+DDRC                              TRISC
+DDRD                              TRISD
+DDRE                              TRISE
+DFLTCON                           00000F60
+DISPALY_CAP1_H                    00000015
+DISPALY_CAP1_L                    00000016
+DISPALY_CAP2_H                    00000017
+DISPALY_CAP2_L                    00000018
+DISPALY_CAP3_H                    00000019
+DISPALY_CAP3_L                    0000001A
+DISPLAY_CURRENT_Iu                00000005
+DISPLAY_CURRENT_Iv                00000006
+DISPLAY_CURRENT_Iw                00000007
+DISPLAY_DIGITS                    000002E2
+DISPLAY_EIH                       00000010
+DISPLAY_EIL                       00000011
+DISPLAY_EOH                       00000012
+DISPLAY_EOL                       00000013
+DISPLAY_EOLL                      00000014
+DISPLAY_FORWARD                   0000029E
+DISPLAY_MISC_PARA2H               0000000A
+DISPLAY_MISC_PARA2L               0000000B
+DISPLAY_MISC_PARAH                00000008
+DISPLAY_MISC_PARAL                00000009
+DISPLAY_PARAMETERS                0000004E
+DISPLAY_REVERSE                   000002C0
+DISPLAY_SFH                       0000000C
+DISPLAY_SFL                       0000000D
+DISPLAY_SPEED_ACTH                00000003
+DISPLAY_SPEED_ACTL                00000004
+DISPLAY_SPEED_REF                 00000002
+DISPLAY_SRH                       0000000E
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 14
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+DISPLAY_SRL                       0000000F
+DISPLAY_TEMP1                     00000000
+DISPLAY_TEMP2                     00000001
+DISP_FORWARD                      000002B8
+DISP_REVERSE                      000002DA
+DONE                              00000001
+DOWN                              00000005
+DT0                               00000000
+DT1                               00000001
+DT2                               00000002
+DT3                               00000003
+DT4                               00000004
+DT5                               00000005
+DTA0                              00000000
+DTA1                              00000001
+DTA2                              00000002
+DTA3                              00000003
+DTA4                              00000004
+DTA5                              00000005
+DTAPS0                            00000006
+DTAPS1                            00000007
+DTCON                             00000F6D
+DTPS0                             00000006
+DTPS1                             00000007
+D_A                               00000005
+EEADR                             00000FA9
+EECON1                            00000FA6
+EECON2                            00000FA7
+EEDATA                            00000FA8
+EEIE                              00000004
+EEIF                              00000004
+EEIP                              00000004
+EEPGD                             00000007
+FAST                              00000001
+FERR                              00000002
+FFOVFL                            00000002
+FIFOEN                            00000004
+FLT1EN                            00000003
+FLT2EN                            00000004
+FLT3EN                            00000005
+FLT4EN                            00000006
+FLTA                              00000001
+FLTAEN                            00000000
+FLTAMOD                           00000001
+FLTAS                             00000002
+FLTB                              00000002
+FLTBEN                            00000004
+FLTBMOD                           00000005
+FLTBS                             00000006
+FLTCK0                            00000000
+FLTCK1                            00000001
+FLTCK2                            00000002
+FLTCON                            00000003
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 15
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+FLTCONFIG                         00000F6C
+FLTS                              00000002
+FREE                              00000004
+FSR0                              00000000
+FSR0H                             00000FEA
+FSR0L                             00000FE9
+FSR1                              00000001
+FSR1H                             00000FE2
+FSR1L                             00000FE1
+FSR2                              00000002
+FSR2H                             00000FDA
+FSR2L                             00000FD9
+GASEL0                            00000000
+GASEL1                            00000001
+GBSEL0                            00000004
+GBSEL1                            00000005
+GCSEL0                            00000002
+GCSEL1                            00000003
+GDSEL0                            00000006
+GDSEL1                            00000007
+GIE                               00000007
+GIEH                              00000007
+GIEL                              00000006
+GO                                00000001
+GO_DONE                           00000001
+IC1IE                             00000001
+IC1IF                             00000001
+IC1IP                             00000001
+IC2QEIE                           00000002
+IC2QEIF                           00000002
+IC2QEIP                           00000002
+IC3DRIE                           00000003
+IC3DRIF                           00000003
+IC3DRIP                           00000003
+IDLEN                             00000007
+INDF0                             00000FEF
+INDF1                             00000FE7
+INDF2                             00000FDF
+INITIALIZE_SERIAL_PORT            00000000
+INT0                              00000003
+INT0E                             00000004
+INT0F                             00000001
+INT0IE                            00000004
+INT0IF                            00000001
+INT1                              00000004
+INT1E                             00000003
+INT1F                             00000000
+INT1IE                            00000003
+INT1IF                            00000000
+INT1IP                            00000006
+INT1P                             00000006
+INT2                              00000005
+INT2E                             00000004
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 16
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+INT2F                             00000001
+INT2IE                            00000004
+INT2IF                            00000001
+INT2IP                            00000007
+INT2P                             00000007
+INTCON                            00000FF2
+INTCON2                           00000FF1
+INTCON3                           00000FF0
+INTEDG0                           00000006
+INTEDG1                           00000005
+INTEDG2                           00000004
+IOFS                              00000002
+IPEN                              00000007
+IPR1                              00000F9F
+IPR2                              00000FA2
+IPR3                              00000FA5
+IRCF0                             00000004
+IRCF1                             00000005
+IRCF2                             00000006
+IRVST                             00000005
+IVRST                             00000005
+LATA                              00000F89
+LATA0                             00000000
+LATA1                             00000001
+LATA2                             00000002
+LATA3                             00000003
+LATA4                             00000004
+LATA6                             00000006
+LATA7                             00000007
+LATB                              00000F8A
+LATB0                             00000000
+LATB1                             00000001
+LATB2                             00000002
+LATB3                             00000003
+LATB4                             00000004
+LATB5                             00000005
+LATB6                             00000006
+LATB7                             00000007
+LATC                              00000F8B
+LATC0                             00000000
+LATC1                             00000001
+LATC2                             00000002
+LATC3                             00000003
+LATC4                             00000004
+LATC5                             00000005
+LATC6                             00000006
+LATC7                             00000007
+LESS_39                           00000310
+LVDCON                            00000FD2
+LVDEN                             00000004
+LVDIE                             00000002
+LVDIF                             00000002
+LVDIP                             00000002
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 17
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+LVDL0                             00000000
+LVDL1                             00000001
+LVDL2                             00000002
+LVDL3                             00000003
+MAXCNTH                           00000F65
+MAXCNTL                           00000F64
+N                                 00000004
+NOT_A                             00000005
+NOT_ADDRESS                       00000005
+NOT_BOR                           00000000
+NOT_DONE                          00000001
+NOT_DOWN                          00000005
+NOT_FLTA                          00000001
+NOT_FLTB                          00000002
+NOT_IPEN                          00000007
+NOT_PD                            00000002
+NOT_POR                           00000001
+NOT_RBPU                          00000007
+NOT_RESEN                         00000006
+NOT_RI                            00000004
+NOT_SS                            00000006
+NOT_T1SYNC                        00000002
+NOT_T5SYNC                        00000002
+NOT_TO                            00000003
+NOT_VELM                          00000007
+NOT_W                             00000002
+NOT_WRITE                         00000002
+OERR                              00000001
+OSC2                              00000006
+OSCCON                            00000FD3
+OSCTUNE                           00000F9B
+OSFIE                             00000007
+OSFIF                             00000007
+OSFIP                             00000007
+OSTS                              00000003
+OSYNC                             00000000
+OV                                00000003
+OVDCOND                           00000F6B
+OVDCONS                           00000F6A
+P                                 00000004
+PARAMETER_0                       00000130
+PARAMETER_1                       00000158
+PARAMETER_10                      00000298
+PARAMETER_2                       0000017E
+PARAMETER_3                       000001A0
+PARAMETER_4                       000001C2
+PARAMETER_5                       000001E4
+PARAMETER_6                       0000020E
+PARAMETER_7                       00000238
+PARAMETER_8                       00000258
+PARAMETER_9                       00000278
+PARAMETER_EIGHT                   0000023E
+PARAMETER_FIVE                    000001CA
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 18
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+PARAMETER_FOUR                    000001A8
+PARAMETER_NINE                    0000025E
+PARAMETER_ONE                     0000013E
+PARAMETER_SEVEN                   0000021E
+PARAMETER_SIX                     000001F4
+PARAMETER_TEN                     0000027E
+PARAMETER_THREE                   00000186
+PARAMETER_TWO                     00000164
+PARAMETER_ZERO                    00000116
+PC                                00000FF9
+PCL                               00000FF9
+PCLATH                            00000FFA
+PCLATU                            00000FFB
+PD                                00000002
+PDC0H                             00000F78
+PDC0L                             00000F79
+PDC1H                             00000F76
+PDC1L                             00000F77
+PDC2H                             00000F74
+PDC2L                             00000F75
+PDEC0                             00000000
+PDEC1                             00000001
+PEIE                              00000006
+PIE1                              00000F9D
+PIE2                              00000FA0
+PIE3                              00000FA3
+PIR1                              00000F9E
+PIR2                              00000FA1
+PIR3                              00000FA4
+PLUSW0                            00000FEB
+PLUSW1                            00000FE3
+PLUSW2                            00000FDB
+PMOD0                             00000000
+PMOD1                             00000001
+PMOD2                             00000002
+PMOD3                             00000003
+POR                               00000001
+PORTA                             00000F80
+PORTB                             00000F81
+PORTC                             00000F82
+PORTE                             00000F84
+POSCNTH                           00000F67
+POSCNTL                           00000F66
+POSTDEC0                          00000FED
+POSTDEC1                          00000FE5
+POSTDEC2                          00000FDD
+POSTINC0                          00000FEE
+POSTINC1                          00000FE6
+POSTINC2                          00000FDE
+POUT0                             00000000
+POUT1                             00000001
+POUT2                             00000002
+POUT3                             00000003
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 19
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+POUT4                             00000004
+POUT5                             00000005
+POUT6                             00000006
+POUT7                             00000007
+POVD0                             00000000
+POVD1                             00000001
+POVD2                             00000002
+POVD3                             00000003
+POVD4                             00000004
+POVD5                             00000005
+POVD6                             00000006
+POVD7                             00000007
+PR2                               00000FCB
+PR5H                              00000F91
+PR5L                              00000F90
+PREINC0                           00000FEC
+PREINC1                           00000FE4
+PREINC2                           00000FDC
+PROD                              00000FF3
+PRODH                             00000FF4
+PRODL                             00000FF3
+PSA                               00000003
+PTCKPS0                           00000002
+PTCKPS1                           00000003
+PTCON0                            00000F7F
+PTCON1                            00000F7E
+PTDIR                             00000006
+PTEN                              00000007
+PTIE                              00000004
+PTIF                              00000004
+PTIP                              00000004
+PTMOD0                            00000000
+PTMOD1                            00000001
+PTMRH                             00000F7C
+PTMRL                             00000F7D
+PTOPS0                            00000004
+PTOPS1                            00000005
+PTOPS2                            00000006
+PTOPS3                            00000007
+PTPERH                            00000F7A
+PTPERL                            00000F7B
+PWMCON0                           00000F6F
+PWMCON1                           00000F6E
+PWMEN0                            00000004
+PWMEN1                            00000005
+PWMEN2                            00000006
+QEICON                            00000FB6
+QEIM0                             00000002
+QEIM1                             00000003
+QEIM2                             00000004
+R                                 00000002
+RA0                               00000000
+RA1                               00000001
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 20
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+RA2                               00000002
+RA3                               00000003
+RA4                               00000004
+RA6                               00000006
+RA7                               00000007
+RB0                               00000000
+RB1                               00000001
+RB2                               00000002
+RB3                               00000003
+RB4                               00000004
+RB5                               00000005
+RB6                               00000006
+RB7                               00000007
+RBIE                              00000003
+RBIF                              00000000
+RBIP                              00000000
+RBPU                              00000007
+RC0                               00000000
+RC1                               00000001
+RC2                               00000002
+RC3                               00000003
+RC4                               00000004
+RC5                               00000005
+RC6                               00000006
+RC7                               00000007
+RCIDL                             00000006
+RCIE                              00000005
+RCIF                              00000005
+RCIP                              00000005
+RCON                              00000FD0
+RCREG                             00000FAE
+RCSTA                             00000FAB
+RD                                00000000
+RD16                              00000007
+RE3                               00000003
+READ_WRITE                        00000002
+RESEN                             00000006
+RI                                00000004
+RX                                00000007
+RX9                               00000006
+RX9D                              00000000
+R_W                               00000002
+S                                 00000003
+SASEL0                            00000000
+SASEL1                            00000001
+SBSEL0                            00000004
+SBSEL1                            00000005
+SCK                               00000005
+SCKP                              00000004
+SCL                               00000005
+SCS0                              00000000
+SCS1                              00000001
+SCSEL0                            00000002
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 21
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+SCSEL1                            00000003
+SDA                               00000004
+SDI                               00000004
+SDO                               00000007
+SDSEL0                            00000006
+SDSEL1                            00000007
+SENDB                             00000003
+SEND_BYTE_FROM_WREG               00000012
+SEND_NEXT_FWD                     000002AA
+SEND_NEXT_P0                      00000122
+SEND_NEXT_P1                      0000014A
+SEND_NEXT_P10                     0000028A
+SEND_NEXT_P2                      00000170
+SEND_NEXT_P3                      00000192
+SEND_NEXT_P4                      000001B4
+SEND_NEXT_P5                      000001D6
+SEND_NEXT_P6                      00000200
+SEND_NEXT_P7                      0000022A
+SEND_NEXT_P8                      0000024A
+SEND_NEXT_P9                      0000026A
+SEND_NEXT_REVERSE                 000002CC
+SEND_NEXT_W1                      00000028
+SEVOPS0                           00000004
+SEVOPS1                           00000005
+SEVOPS2                           00000006
+SEVOPS3                           00000007
+SEVTCMPH                          00000F70
+SEVTCMPL                          00000F71
+SEVTDIR                           00000003
+SMP                               00000007
+SPBRG                             00000FAF
+SPBRGH                            00000FB0
+SPEN                              00000007
+SREN                              00000005
+SS                                00000006
+SSPADD                            00000FC8
+SSPBUF                            00000FC9
+SSPCON                            00000FC6
+SSPEN                             00000005
+SSPIE                             00000003
+SSPIF                             00000003
+SSPIP                             00000003
+SSPM0                             00000000
+SSPM1                             00000001
+SSPM2                             00000002
+SSPM3                             00000003
+SSPOV                             00000006
+SSPSTAT                           00000FC7
+SSRC0                             00000000
+SSRC1                             00000001
+SSRC2                             00000002
+SSRC3                             00000003
+SSRC4                             00000004
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 22
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+STATUS                            00000FD8
+STKFUL                            00000007
+STKOVF                            00000007
+STKPTR                            00000FFC
+STKPTR0                           00000000
+STKPTR1                           00000001
+STKPTR2                           00000002
+STKPTR3                           00000003
+STKPTR4                           00000004
+STKUNF                            00000006
+SWDTEN                            00000000
+SYNC                              00000004
+T016BIT                           00000006
+T0CKI                             00000003
+T0CON                             00000FD5
+T0CS                              00000005
+T0IE                              00000005
+T0IF                              00000002
+T0IP                              00000002
+T0PS0                             00000000
+T0PS1                             00000001
+T0PS2                             00000002
+T0PS3                             00000003
+T0SE                              00000004
+T13CKI                            00000000
+T1CKPS0                           00000004
+T1CKPS1                           00000005
+T1CON                             00000FCD
+T1INSYNC                          00000002
+T1OSCEN                           00000003
+T1OSI                             00000001
+T1OSO                             00000000
+T1RUN                             00000006
+T1SYNC                            00000002
+T2CKPS0                           00000000
+T2CKPS1                           00000001
+T2CON                             00000FCA
+T2OUTPS0                          00000003
+T2OUTPS1                          00000004
+T2OUTPS2                          00000005
+T2OUTPS3                          00000006
+T5CKI                             00000003
+T5CON                             00000FB7
+T5MOD                             00000005
+T5PS0                             00000003
+T5PS1                             00000004
+T5SEN                             00000007
+T5SYNC                            00000002
+TABLAT                            00000FF5
+TBIE                              00000004
+TBIF                              00000004
+TBIP                              00000004
+TBLPTR                            00000FF6
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 23
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+TBLPTRH                           00000FF7
+TBLPTRL                           00000FF6
+TBLPTRU                           00000FF8
+TMR0H                             00000FD7
+TMR0IE                            00000005
+TMR0IF                            00000002
+TMR0IP                            00000002
+TMR0L                             00000FD6
+TMR0ON                            00000007
+TMR1CS                            00000001
+TMR1H                             00000FCF
+TMR1IE                            00000000
+TMR1IF                            00000000
+TMR1IP                            00000000
+TMR1L                             00000FCE
+TMR1ON                            00000000
+TMR2                              00000FCC
+TMR2IE                            00000001
+TMR2IF                            00000001
+TMR2IP                            00000001
+TMR2ON                            00000002
+TMR5CS                            00000001
+TMR5H                             00000F88
+TMR5IE                            00000000
+TMR5IF                            00000000
+TMR5IP                            00000000
+TMR5L                             00000F87
+TMR5ON                            00000000
+TO                                00000003
+TOS                               00000FFD
+TOSH                              00000FFE
+TOSL                              00000FFD
+TOSU                              00000FFF
+TRISA                             00000F92
+TRISA0                            00000000
+TRISA1                            00000001
+TRISA2                            00000002
+TRISA3                            00000003
+TRISA4                            00000004
+TRISA6                            00000006
+TRISA7                            00000007
+TRISB                             00000F93
+TRISB0                            00000000
+TRISB1                            00000001
+TRISB2                            00000002
+TRISB3                            00000003
+TRISB4                            00000004
+TRISB5                            00000005
+TRISB6                            00000006
+TRISB7                            00000007
+TRISC                             00000F94
+TRISC0                            00000000
+TRISC1                            00000001
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 24
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+TRISC2                            00000002
+TRISC3                            00000003
+TRISC4                            00000004
+TRISC5                            00000005
+TRISC6                            00000006
+TRISC7                            00000007
+TRMT                              00000001
+TUN0                              00000000
+TUN1                              00000001
+TUN2                              00000002
+TUN3                              00000003
+TUN4                              00000004
+TUN5                              00000005
+TX                                00000006
+TX9                               00000006
+TX9D                              00000000
+TXEN                              00000005
+TXIE                              00000004
+TXIF                              00000004
+TXIP                              00000004
+TXREG                             00000FAD
+TXSTA                             00000FAC
+UA                                00000001
+UDIS                              00000001
+UP                                00000005
+UP_DOWN                           00000005
+VCFG0                             00000006
+VCFG1                             00000007
+VELM                              00000007
+VELRH                             00000F69
+VELRL                             00000F68
+VREFM                             00000002
+VREFP                             00000003
+W                                 00000000
+WCOL                              00000007
+WDT0                              00000001
+WDT1                              00000002
+WDT2                              00000003
+WDT3                              00000004
+WDT4                              00000005
+WDT5                              00000006
+WDT6                              00000007
+WDTCON                            00000FD1
+WDTW                              00000007
+WELCOME_MESSAGE                   0000001C
+WELCOME_TABLE                     00000036
+WR                                00000001
+WREG                              00000FE8
+WREN                              00000002
+WRERR                             00000003
+WUE                               00000001
+Z                                 00000002
+_BOREN_OFF_2L                     000000FD
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 25
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_BOREN_ON_2L                      000000FF
+_BORV_20_2L                       000000FF
+_BORV_27_2L                       000000FB
+_BORV_42_2L                       000000F7
+_BORV_45_2L                       000000F3
+_CONFIG1H                         00300001
+_CONFIG2H                         00300003
+_CONFIG2L                         00300002
+_CONFIG3H                         00300005
+_CONFIG3L                         00300004
+_CONFIG4L                         00300006
+_CONFIG5H                         00300009
+_CONFIG5L                         00300008
+_CONFIG6H                         0030000B
+_CONFIG6L                         0030000A
+_CONFIG7H                         0030000D
+_CONFIG7L                         0030000C
+_CP0_OFF_5L                       000000FF
+_CP0_ON_5L                        000000FE
+_CP1_OFF_5L                       000000FF
+_CP1_ON_5L                        000000FD
+_CP2_OFF_5L                       000000FF
+_CP2_ON_5L                        000000FB
+_CP3_OFF_5L                       000000FF
+_CP3_ON_5L                        000000F7
+_CPB_OFF_5H                       000000FF
+_CPB_ON_5H                        000000BF
+_CPD_OFF_5H                       000000FF
+_CPD_ON_5H                        0000007F
+_DEBUG_OFF_4L                     000000FF
+_DEBUG_ON_4L                      0000007F
+_DEVID1                           003FFFFE
+_DEVID2                           003FFFFF
+_EBTR0_OFF_7L                     000000FF
+_EBTR0_ON_7L                      000000FE
+_EBTR1_OFF_7L                     000000FF
+_EBTR1_ON_7L                      000000FD
+_EBTRB_OFF_7H                     000000FF
+_EBTRB_ON_7H                      000000BF
+_FCMEN_OFF_1H                     000000BF
+_FCMEN_ON_1H                      000000FF
+_HPOL_HIGH_3L                     000000FF
+_HPOL_LOW_3L                      000000EF
+_IDLOC0                           00200000
+_IDLOC1                           00200001
+_IDLOC2                           00200002
+_IDLOC3                           00200003
+_IDLOC4                           00200004
+_IDLOC5                           00200005
+_IDLOC6                           00200006
+_IDLOC7                           00200007
+_IESO_OFF_1H                      0000007F
+_IESO_ON_1H                       000000FF
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 26
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_LPOL_HIGH_3L                     000000FF
+_LPOL_LOW_3L                      000000F7
+_LVP_OFF_4L                       000000FB
+_LVP_ON_4L                        000000FF
+_MCLRE_OFF_3H                     0000007F
+_MCLRE_ON_3H                      000000FF
+_OSC_ECIO_1H                      000000F5
+_OSC_EC_1H                        000000F4
+_OSC_HSPLL_1H                     000000F6
+_OSC_HS_1H                        000000F2
+_OSC_IRCIO_1H                     000000F8
+_OSC_IRC_1H                       000000F9
+_OSC_LP_1H                        000000F0
+_OSC_RC1_1H                       000000FB
+_OSC_RC2_1H                       000000F3
+_OSC_RCIO_1H                      000000F7
+_OSC_RC_1H                        000000FF
+_OSC_XT_1H                        000000F1
+_PWMPIN_OFF_3L                    000000FF
+_PWMPIN_ON_3L                     000000FB
+_PWRTEN_OFF_2L                    000000FF
+_PWRTEN_ON_2L                     000000FE
+_STVREN_OFF_4L                    000000FE
+_STVREN_ON_4L                     000000FF
+_T1OSCMX_OFF_3L                   000000DF
+_T1OSCMX_ON_3L                    000000FF
+_WDPS_1024_2H                     000000F5
+_WDPS_128_2H                      000000EF
+_WDPS_16384_2H                    000000FD
+_WDPS_16_2H                       000000E9
+_WDPS_1_2H                        000000E1
+_WDPS_2048_2H                     000000F7
+_WDPS_256_2H                      000000F1
+_WDPS_2_2H                        000000E3
+_WDPS_32768_2H                    000000FF
+_WDPS_32_2H                       000000EB
+_WDPS_4096_2H                     000000F9
+_WDPS_4_2H                        000000E5
+_WDPS_512_2H                      000000F3
+_WDPS_64_2H                       000000ED
+_WDPS_8192_2H                     000000FB
+_WDPS_8_2H                        000000E7
+_WDTEN_OFF_2H                     000000FE
+_WDTEN_ON_2H                      000000FF
+_WINEN_OFF_2H                     000000FF
+_WINEN_ON_2H                      000000DF
+_WRT0_OFF_6L                      000000FF
+_WRT0_ON_6L                       000000FE
+_WRT1_OFF_6L                      000000FF
+_WRT1_ON_6L                       000000FD
+_WRTB_OFF_6H                      000000FF
+_WRTB_ON_6H                       000000BF
+_WRTC_OFF_6H                      000000FF
+MPASM  5.37                    MOTOR_COM1.ASM   11-10-2010  10:53:21         PAGE 27
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_WRTC_ON_6H                       000000DF
+_WRTD_OFF_6H                      000000FF
+_WRTD_ON_6H                       0000007F
+__18F2431                         00000001
+
+Errors   :     0
+Warnings :     0 reported,     0 suppressed
+Messages :     0 reported,     0 suppressed
+
+

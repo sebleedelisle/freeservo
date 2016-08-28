@@ -1,0 +1,2825 @@
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE  1
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00001 ;******************************************************************************
+                      00002 ;
+                      00003 ; Software License Agreement                                         
+                      00004 ;                                                                    
+                      00005 ; The software supplied herewith by Microchip Technology             
+                      00006 ; Incorporated (the "Company") is intended and supplied to you, the  
+                      00007 ; Company’s customer, for use solely and exclusively on Microchip    
+                      00008 ; products. The software is owned by the Company and/or its supplier,
+                      00009 ; and is protected under applicable copyright laws. All rights are   
+                      00010 ; reserved. Any use in violation of the foregoing restrictions may   
+                      00011 ; subject the user to criminal sanctions under applicable laws, as   
+                      00012 ; well as to civil liability for the breach of the terms and         
+                      00013 ; conditions of this license.                                        
+                      00014 ;                                                                     
+                      00015 ; THIS SOFTWARE IS PROVIDED IN AN "AS IS" CONDITION. NO WARRANTIES,  
+                      00016 ; WHETHER EXPRESS, IMPLIED OR STATUTORY, INCLUDING, BUT NOT LIMITED  
+                      00017 ; TO, IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A       
+                      00018 ; PARTICULAR PURPOSE APPLY TO THIS SOFTWARE. THE COMPANY SHALL NOT,  
+                      00019 ; IN ANY CIRCUMSTANCES, BE LIABLE FOR SPECIAL, INCIDENTAL OR         
+                      00020 ; CONSEQUENTIAL DAMAGES, FOR ANY REASON WHATSOEVER.       
+                      00021 ;
+                      00022 ;*********************************************************************************
+                      00023 ;-----------------------------------------------------------------
+                      00024 ;This program is used for sensorless control of BLDC motor. 
+                      00025 ;Theory and implementation is expalined in application note AN970
+                      00026 ;Motor connections to the board is as follows:
+                      00027 ;Motor power connection(White square connector with 4 wires)
+                      00028 ;Red : connect to M1 on J9 on the board 
+                      00029 ;White : connect to M2 on J9 on the board 
+                      00030 ;Black : connect to M3 on J9 on the board 
+                      00031 ;Green : connect to G on J9 on the board 
+                      00032 ;----------------------------------------------------
+                      00033 ;-----------------------------------------------------------------
+                      00034 ;       Author  : Padmaraja Yedamle
+                      00035 ;                       : Home Appliance Solutions Group
+                      00036 ;                       : Microchip Technology Inc
+                      00037 ;       Date    : June-25-2004
+                      00038 ;
+                      00039 ;******************************************************************
+                      00040         include         "snsrles_DATA.inc"
+                      00001 ;This file is used for defining the variables and compile time options
+                      00002 ;This file should be included in all .asm/.c files
+                      00003 ;Author : Padmaraja Yedamale
+                      00004 ;Version: V1.1
+                      00005 
+                      00006         include         "P18F2431.inc"
+                      00001         LIST
+                      00002 
+                      00003 ;==========================================================================
+                      00004 ;  MPASM PIC18F2431 processor include
+                      00005 ; 
+                      00006 ;  (c) Copyright 1999-2009 Microchip Technology, All rights reserved
+                      00007 ;==========================================================================
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE  2
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00008 
+                      01340         LIST
+                      00007         
+                      00008 
+                      00009 ;User defined variables
+                      00010 ;---------------------------------------------------------------------------------------
+                      00011 ;Oscillator frequency
+                      00012 #define OSCILLATOR      d'20000000'
+                      00013 ;---------------------------------------------------------------------------------------
+                      00014 ;Enter the PPR of the Optical Encoder on the motor
+                      00015 #define ENCODER_PPR d'1024'
+                      00016 ;---------------------------------------------------------------------------------------
+                      00017 ;Claculating RPM based on the encoder type. The QEI should be in velocity measurement mode
+                      00018 ;Timer5 prescaler
+                      00019 #define TIMER5_PRESCALE d'1'
+                      00020 ;---------------------------------------------------------------------------------------
+                      00021 ;Define the QEI mode of operation. 
+                      00022 ;If the velocity conter is updated only on QEA transition, then enable 2x mode
+                      00023 ;If the velocity conter is updated every QEA and QEB transition, then enable 4x mode
+                      00024 #define QEI_X_UPDATE d'2'
+                      00025 ;#define QEI_X_UPDATE d'4'
+                      00026 ;---------------------------------------------------------------------------------------
+                      00027 ;Define Velocity pulse decimation ratio(Only one line should be selected)
+                      00028 #define VELOCITY_PULSE_DECIMATION d'1' 
+                      00029 ;#define VELOCITY_PULSE_DECIMATION d'4' 
+                      00030 ;#define VELOCITY_PULSE_DECIMATION d'16' 
+                      00031 ;#define VELOCITY_PULSE_DECIMATION d'64' 
+                      00032 ;---------------------------------------------------------------------------------------
+                      00033 ;Calculate the constant to be divided by the Velocity counter value will give RPS
+  004C4B40            00034 INSTRUCTION_CYCLE = (OSCILLATOR)/d'4'
+  00004C48            00035 RPM_CONSTANT_QEI = 8*((INSTRUCTION_CYCLE)/(ENCODER_PPR*QEI_X_UPDATE*VELOCITY_PULSE_DECIMATION*TIMER5_PRE
+                            SCALE))
+                      00036 ;The value is multiplied by 8 to increase the accuracy of division. After devision, the result is devide
+                            d by 8
+  0000CB73            00037 RPM_CONSTANT_HALL = INSTRUCTION_CYCLE/(d'12'*d'8')
+                      00038 ;60 to convert RPM to RPS, 12= # of Hall pulses/revolution
+                      00039 ;---------------------------------------------------------------------------------------
+                      00040 ;PWM frequency definition
+                      00041 #define PWM_TIMER_PRESCALE      d'01'
+                      00042 #define PWM_FREQUENCY   d'16000'
+  00000137            00043 PTPER_VALUE = (OSCILLATOR/(4*PWM_FREQUENCY*PWM_TIMER_PRESCALE))-1
+                      00044 ;---------------------------------------------------------------------------------------
+                      00045 ;Defining the PWM duty cycle constant based on the Motor voltage, DC bus voltage and PWM period register
+                             value
+                      00046 #define MOTOR_VOLTAGE d'24'
+                      00047 #define DC_INPUT_VOLTAGE        d'24'
+                      00048 #define MOTOR_RATED_SPEED d'2500'
+                      00049 
+  0000004F            00050 MAIN_PWM_CONSTANT =(MOTOR_VOLTAGE*PTPER_VALUE*4*d'16')/(DC_INPUT_VOLTAGE*d'250')        ;256
+                      00051 ;1.414*256 = 360
+                      00052 ;Multiplication factor = 16
+  00000008            00053 ERROR_PWM_CONSTANT = (MAIN_PWM_CONSTANT * d'256')/MOTOR_RATED_SPEED
+  00000372            00054 MAX_PWM_VALUE = (MOTOR_VOLTAGE*PTPER_VALUE*4*d'100')/(DC_INPUT_VOLTAGE* d'141')
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE  3
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00055 ;---------------------------------------------------------------------------------------
+  00002711            00056 ESTIMATE_TIMER_CONSTANT = ((d'60'* INSTRUCTION_CYCLE)/(MOTOR_RATED_SPEED*d'12'))+1
+                      00057 
+                      00058 ;-------------------------------
+                      00059 ;Commutation table. loaded to OVDCOND
+                      00060 ;-------------------------------
+                      00061 ; The Hall sensor makes a transition every 60 degrees
+                      00062 ; For other type of motors with different Hall sensor combination, the table has to be modified.
+                      00063 
+                      00064 ;Position old
+                      00065 ;#define        POSITION0       b'00000000'
+                      00066 ;#define        POSITION1       b'00010010'
+                      00067 ;#define        POSITION2       b'00100100'
+                      00068 ;#define        POSITION3       b'00000110'
+                      00069 ;#define        POSITION4       b'00001001'
+                      00070 ;#define        POSITION5       b'00011000'
+                      00071 ;#define        POSITION6       b'00100001'
+                      00072 ;#define        POSITION7       b'00000000'
+                      00073 
+                      00074 
+                      00075 ;new2 -60 Best perf
+                      00076 
+                      00077 #define POSITION0       b'00000000'     ;This will be loaded to OVDCOND register when HallA=0,HallB=0,Ha
+                            llC=0
+                      00078 #define POSITION1       b'00010010' ;This will be loaded to OVDCOND register when HallA=0,HallB=0,HallC=
+                            1
+                      00079 #define POSITION2       b'00001001'     ;This will be loaded to OVDCOND register when HallA=1,HallB=0,Ha
+                            llC=0
+                      00080 #define POSITION3       b'00011000' ;This will be loaded to OVDCOND register when HallA=1,HallB=0,HallC=
+                            1
+                      00081 #define POSITION4       b'00100100'     ;This will be loaded to OVDCOND register when HallA=0,HallB=1,Ha
+                            llC=0
+                      00082 #define POSITION5       b'00000110' ;This will be loaded to OVDCOND register when HallA=0,HallB=1,HallC=
+                            1
+                      00083 #define POSITION6       b'00100001' ;This will be loaded to OVDCOND register when HallA=1,HallB=1,HallC=
+                            0
+                      00084 #define POSITION7       b'00000000' ;This will be loaded to OVDCOND register when HallA=1,HallB=1,HallC=
+                            1
+                      00085 
+                      00086 ;new1
+                      00087 #define POSITION01      b'00000000'     ;This will be loaded to OVDCOND register when HallA=0,HallB=0,Ha
+                            llC=0
+                      00088 #define POSITION11      b'00010010' ;This will be loaded to OVDCOND register when HallA=0,HallB=0,HallC=
+                            1
+                      00089 #define POSITION21      b'00001001'     ;This will be loaded to OVDCOND register when HallA=1,HallB=0,Ha
+                            llC=0
+                      00090 #define POSITION31      b'00011000' ;This will be loaded to OVDCOND register when HallA=1,HallB=0,HallC=
+                            1
+                      00091 #define POSITION41      b'00100100'     ;This will be loaded to OVDCOND register when HallA=0,HallB=1,Ha
+                            llC=0
+                      00092 #define POSITION51      b'00000110' ;This will be loaded to OVDCOND register when HallA=0,HallB=1,HallC=
+                            1
+                      00093 #define POSITION61      b'00100001' ;This will be loaded to OVDCOND register when HallA=1,HallB=1,HallC=
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE  4
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                            0
+                      00094 #define POSITION71      b'00000000' ;This will be loaded to OVDCOND register when HallA=1,HallB=1,HallC=
+                            1
+                      00095 
+                      00096 ;new1
+                      00097 ;#define        POSITION01      b'00000000'     ;This will be loaded to OVDCOND register when HallA=0,Ha
+                            llB=0,HallC=0
+                      00098 ;#define        POSITION41      b'00001001'     ;This will be loaded to OVDCOND register when HallA=1,Ha
+                            llB=0,HallC=0
+                      00099 ;#define        POSITION61      b'00100100'     ;This will be loaded to OVDCOND register when HallA=0,Ha
+                            llB=1,HallC=0
+                      00100 ;#define        POSITION51      b'00100001' ;This will be loaded to OVDCOND register when HallA=1,HallB=
+                            1,HallC=0
+                      00101 ;#define        POSITION21      b'00010010' ;This will be loaded to OVDCOND register when HallA=0,HallB=
+                            0,HallC=1
+                      00102 ;#define        POSITION31      b'00011000' ;This will be loaded to OVDCOND register when HallA=1,HallB=
+                            0,HallC=1
+                      00103 ;#define        POSITION11      b'00000110' ;This will be loaded to OVDCOND register when HallA=0,HallB=
+                            1,HallC=1
+                      00104 ;#define        POSITION71      b'00000000' ;This will be loaded to OVDCOND register when HallA=1,HallB=
+                            1,HallC=1
+                      00105 
+                      00106 
+                      00107 ;Hurst Motor connection:
+                      00108 ;Power :
+                      00109 ; M1 : White
+                      00110 ; M2 : Black
+                      00111 ; M3 : Red
+                      00112 ; G : Green
+                      00113 ;Hall sensors:
+                      00114 ;HA : White
+                      00115 ;HB : Brown
+                      00116 ;HC : Green
+                      00117 ;+5V : Red
+                      00118 ;GND : Black
+                      00119 
+                      00120 
+                      00121 ;---------------------------------------------------------------------------------------
+                      00122 
+                      00123 #ifndef ANSEL1     
+                      00124 ANSEL1           EQU  H'0FB9'
+                      00125 #endif
+                      00126 
+                      00127 
+                      00128 #define LOW_OL_SPEEDH 0xB0
+                      00129 #define LOW_OL_SPEEDL 0xF0
+                      00130 #define HIGH_OL_SPEEDH 0xD8
+                      00131 #define HIGH_OL_SPEEDL 0x78
+                      00132 
+                      00133 
+                      00041 
+                      00042 ;--------------------------------------------------
+                      00043         LIST p=18f2431,f=INHX32
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE  5
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00044 
+                      00045 
+                      00046 ;Old way of defining the configuration registers
+                      00047 ;       __CONFIG _CONFIG1H, 0x06 ;_OSC_HS_1H &_FCMEN_OFF_1H&_IESO_OFF_1H
+                      00048 ;       __CONFIG _CONFIG2L, 0x0E ;_PWRTEN_ON_2L & _BOREN_ON_2L & _BORV_20_2L  
+                      00049 ;       __CONFIG _CONFIG2H, 0x1E ;_WDTEN_OFF_2H
+                      00050 ;       __CONFIG _CONFIG3L, 0x3C ;0x24 ;_PWMPIN_OFF_3L & _LPOL_LOW_3L & _HPOL_LOW_3L & _GPTREN_ON_3L
+                      00051 ;       __CONFIG _CONFIG3H, 0x9D ;_FLTAMX_RC1_3H & _PWM4MX_RB5_3H
+                      00052 ;       __CONFIG _CONFIG4L, 0x80 
+                      00053 ;       __CONFIG _CONFIG5L, 0x0F 
+                      00054 ;       __CONFIG _CONFIG5H, 0xC0  
+                      00055 ;       __CONFIG _CONFIG6L, 0x0F 
+                      00056 ;       __CONFIG _CONFIG6H, 0xE0 
+                      00057 ;       __CONFIG _CONFIG7L, 0x0F 
+                      00058 ;       __CONFIG _CONFIG7H, 0x40    
+                      00059 
+                      00060 ;New way of defining the configuration registers
+                      00061         CONFIG OSC=HSPLL, FCMEN=OFF, IESO=OFF
+                      00062         CONFIG PWRTEN=ON, BOREN=ON, BORV=27
+                      00063         CONFIG WDTEN=OFF, WINEN=OFF
+                      00064         CONFIG T1OSCMX=OFF, HPOL=HIGH, LPOL=HIGH, PWMPIN=OFF
+                      00065         CONFIG MCLRE=ON
+                      00066         CONFIG STVREN=OFF, LVP=OFF
+                      00067         CONFIG CP0=OFF, CP1=OFF, CP2=OFF, CP3=OFF
+                      00068         CONFIG CPB=OFF, CPD=OFF
+                      00069         CONFIG WRT0=OFF, WRT1=OFF
+                      00070         CONFIG WRTB=OFF, WRTC=OFF, WRTD=OFF
+                      00071         CONFIG EBTR0=OFF, EBTR1=OFF 
+                      00072         CONFIG EBTRB=OFF
+                      00073 
+                      00074 ;--------------------------------------------------
+                      00075 
+                      00076 
+                      00077 
+                      00078 
+                      00079 ;******************************************************************
+                      00080 #define         HURST_MOTOR     
+                      00081 
+                      00082 #define CYCLE_COUNT_MAXH        0x4E
+                      00083 #define CYCLE_COUNT_MAXL        0x20
+                      00084 #define MAX_FLTA_COUNT  0x20
+                      00085 #define MAX_FLTB_COUNT  .20
+                      00086 #define MAX_HEATSINKTEMP        .20
+                      00087 
+                      00088 #define CURRENT_FAULT_INPUT     1
+                      00089 ;----------------------------------------------
+                      00090 ;FLAGS bits
+                      00091 #define HALL_FLAG               0
+                      00092 #define FLAG_FAULT              1
+                      00093 #define PARAM_DISPLAY   2
+                      00094 #define POSITION_BIT    3
+                      00095 #define VELOCITY_READY  4
+                      00096 #define NEGATIVE_ERROR  5
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE  6
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00097 #define CALC_PWM                6
+                      00098 
+                      00099 
+                      00100 ;FLAGS1 bits
+                      00101 #define DEBOUNCE        0
+                      00102 #define KEY_RS          1
+                      00103 #define KEY_FR          2
+                      00104 #define KEY_PRESSED 3
+                      00105 
+                      00106 #define RUN_STOP 4
+                      00107 #define FWD_REV 5
+                      00108 
+                      00109 
+                      00110 ;FLT_FLAGS bits
+                      00111 #define OCUR    0
+                      00112 #define OVOLT   1
+                      00113 #define OTEMP   2
+                      00114 
+                      00115 ;FLAGS_SRLS bits
+                      00116 #define IC_ALOWED       0
+                      00117 #define SWITCH_SENSORLESS       1
+                      00118 #define PHASE_SHIFT_READY       2
+                      00119 #define OPEN_SPEED_STEP2        3
+                      00120 
+                      00121 #define PC_COM  7
+                      00122 
+                      00123 ;Delay parameters
+                      00124 #define DELAY_COUNT1    0x01
+                      00125 #define DELAY_COUNT2    0xFF
+                      00126 
+                      00127 ;----------------------------------------------------------
+                      00128 ;#define BLDC_MOTOR_CONTROL_BOARD       ;uncomment if older version of the board is used
+                      00129 #define PICDEM_MC_LV                            ;uncomment if the release version of PICDEM LV is used.
+                      00130 ;----------------------------------------------------------
+                      00131 
+                      00132 #ifdef BLDC_MOTOR_CONTROL_BOARD
+                      00133 ;Keys parameters
+                      00134 #define KEY_PORT PORTC
+                      00135 #define RUN_STOP_KEY 4
+                      00136 #define FWD_REV_KEY 5
+                      00137 #define DEBOUNCE_COUNT 0x8F
+                      00138 
+                      00139 ;LED parameters
+                      00140 #define LED_PORT PORTC
+                      00141 #define RUN_STOP_LED 0
+                      00142 #define FWD_REV_LED 2
+                      00143 
+                      00144 #define LED1    PORTC,0
+                      00145 #define LED2    PORTC,2
+                      00146 #define LED3    PORTC,3
+                      00147 
+                      00148 ;PORTC<0> : LED1, Output
+                      00149 ;PORTC<1> : FLTA, Input
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE  7
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00150 ;PORTC<2> : LED2, Output
+                      00151 ;PORTC<3> : LED3, Output
+                      00152 ;PORTC<4> : Switch S3, Input
+                      00153 ;PORTC<5> : Switch S2, Input
+                      00154 ;PORTC<6> : TX, Output
+                      00155 ;PORTC<7> : RX, Input
+                      00156 #define TRISC_VALUE b'00110010'
+                      00157 #endif
+                      00158 
+                      00159 #ifdef PICDEM_MC_LV
+                      00160 ;Keys parameters
+                      00161 ;Keys parameters
+                      00162 #define KEY_PORT PORTC
+                      00163 #define RUN_STOP_KEY 0
+                      00164 #define FWD_REV_KEY 2
+                      00165 #define DEBOUNCE_COUNT 0x8F
+                      00166 
+                      00167 ;LED parameters
+                      00168 #define LED_PORT PORTC
+                      00169 #define RUN_STOP_LED 5
+                      00170 #define FWD_REV_LED 4
+                      00171 
+                      00172 #define LED1    PORTC,5
+                      00173 #define LED2    PORTC,4
+                      00174 #define LED3    PORTC,3
+                      00175 
+                      00176 ;PORTC<0> : Switch S3, Input 
+                      00177 ;PORTC<1> : FLTA, Input
+                      00178 ;PORTC<2> : Switch S2, Input
+                      00179 ;PORTC<3> : LED3, Output
+                      00180 ;PORTC<4> : LED2, Output
+                      00181 ;PORTC<5> : LED1, Output
+                      00182 ;PORTC<6> : TX, Output
+                      00183 ;PORTC<7> : RX, Input
+                      00184 
+                      00185 #define TRISC_VALUE b'00000111'
+                      00186 
+                      00187 #endif
+                      00188 
+                      00189 
+                      00190 
+                      00191 ;******************************************************************
+                      00192 ;       extern          INITIALIZE_SERIAL_PORT
+                      00193 ;       extern          WELCOME_MESSAGE
+                      00194 ;       extern          DISPLAY_PARAMETERS
+                      00195 ;----------------------------------------------------------------
+                      00196 ;       extern  DISPLAY_SPEED_REF       
+                      00197 ;       extern  DISPLAY_SPEED_ACTH      
+                      00198 ;       extern  DISPLAY_SPEED_ACTL      
+                      00199 ;       extern  DISPLAY_CURRENT_Iu      
+                      00200 ;       extern  DISPLAY_CURRENT_Iv      
+                      00201 ;       extern  DISPLAY_CURRENT_Iw      
+                      00202 ;;      extern  DISPLAY_MISC_PARAH
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE  8
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00203 ;       extern  DISPLAY_MISC_PARAL
+                      00204 ;       extern  DISPLAY_MISC_PARA2H
+                      00205 ;       extern  DISPLAY_MISC_PARA2L
+                      00206 ;******************************************************************
+                      00207 BLDC_MOTOR_CONTROL      UDATA_ACS
+                      00208 
+000000                00209 TEMP                    res     1
+000001                00210 TEMP1                   res     1
+000002                00211 HALL_SENSOR_COUNT       res     1
+000003                00212 SPEED_REFH                      res     1
+000004                00213 SPEED_REFL                      res     1
+000005                00214 FLAGS                           res     1
+000006                00215 FLAGS1                          res     1
+000007                00216 FLT_FLAGS                       res     1
+000008                00217 FLAGS_SRLS                      res     1
+                      00218 
+000009                00219 DEBOUNCE_COUNTER        res     1
+00000A                00220 COUNTER                 res     1
+00000B                00221 COUNTER1                        res     1
+00000C                00222 COUNTER_SP                      res     1
+00000D                00223 COUNTER_SP1                     res     1
+00000E                00224 RPM_COUNTER                     res     1
+00000F                00225 VELOCITY_READH          res     1
+000010                00226 VELOCITY_READL          res     1
+                      00227 
+000011                00228 SPEED_REF_RPMH          res     1
+000012                00229 SPEED_REF_RPML          res     1
+000013                00230 SPEED_FEEDBACKH         res     1
+000014                00231 SPEED_FEEDBACKL         res     1
+000015                00232 SPEED_ERRORH            res     1
+000016                00233 SPEED_ERRORL            res     1
+000017                00234 ERROR_PWMH                      res     1
+000018                00235 ERROR_PWML                      res     1
+                      00236 
+000019                00237 POSITION_TABLE_FWD      res     8
+000021                00238 POSITION_TABLE_REV      res     8
+                      00239 
+000029                00240 CURRENT_UH                      res     1
+00002A                00241 CURRENT_UL                      res     1
+                      00242 
+00002B                00243 PDC_TEMPH                       res     1
+00002C                00244 PDC_TEMPL                       res     1
+                      00245 
+00002D                00246 ARG1H                           res     1
+00002E                00247 ARG1L                           res     1
+00002F                00248 ARG2H                           res     1
+000030                00249 ARG2L                           res     1
+000031                00250 RESH                            res     1
+000032                00251 RESL                            res     1
+                      00252 
+000033                00253 CYCLE_COUNTH            res     1
+000034                00254 CYCLE_COUNTL            res     1
+                      00255 
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE  9
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000035                00256 FAULTA_COUNT            res     1
+000036                00257 FAULTB_COUNT            res     1
+000037                00258 PWM_CYCLE_COUNT         res     1
+000038                00259 OPEN_HALL                       res     1
+000039                00260 TABLE_OFFSET            res     1
+00003A                00261 COUNT_OPEN_LOOPL        res     1
+00003B                00262 COUNT_OPEN_LOOPH        res     1
+                      00263 
+00003C                00264 DISPLAY_TEMP1           res     1
+00003D                00265 DISPLAY_TEMP2           res     1
+                      00266 
+00003E                00267 OVDCOND_TEMP            res     1
+00003F                00268 BEMF_ZC                         res     1
+000040                00269 LOCK_ROTOR_COUNT        res     1
+                      00270 
+                      00271 ;----------------------------------------------------------------
+                      00272 STARTUP code 0x00
+000000 EF?? F???      00273         goto    Start           ;Reset Vector address 
+                      00274         
+                      00275         CODE    0x08
+000008 EF?? F???      00276         goto    ISR_HIGH        ;Higher priority ISR at 0x0008
+                      00277 
+                      00278 PRG_LOW CODE    0x018
+000018 EF?? F???      00279         goto    ISR_LOW         ;Lower priority ISR at 0x0018
+                      00280         
+                      00281 ;****************************************************************
+                      00282 PROG    code
+000000                00283 Start
+                      00284 ;****************************************************************
+000000 6A??           00285         clrf    PDC_TEMPH       
+000002 6A??           00286         clrf    PDC_TEMPL               
+000004 6A??           00287         clrf    SPEED_REFH              
+000006 6A??           00288         clrf    FLAGS
+000008 6A??           00289         clrf    FLAGS1
+                      00290         
+00000A EC?? F???      00291         call    FIRST_ADC_INIT
+                      00292 
+00000E                00293 WAIT_HERE
+00000E EC?? F???      00294         call    LED_BLINK
+000012 EC?? F???      00295         call    KEY_CHECK
+000016 A6??           00296         btfss   FLAGS1,KEY_PRESSED
+000018 D???           00297         bra             WAIT_HERE
+00001A EC?? F???      00298         call    INIT_PERPHERALS
+                      00299 
+                      00300         
+00001E 9A82           00301         bcf             LED1
+000020 9882           00302         bcf             LED2
+000022 9682           00303         bcf             LED3
+                      00304 
+000024 0EA0           00305         movlw   0xA0
+000026 6E??           00306         movwf   COUNTER_SP1
+                      00307 
+                      00308         
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 10
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000028 6A??           00309         clrf    FLAGS
+00002A 6A??           00310         clrf    FLAGS1
+00002C 6A??           00311         clrf    FLT_FLAGS
+00002E 6A??           00312         clrf    FLAGS_SRLS
+000030 0EF0           00313         movlw   0xF0
+000032 6E??           00314         movwf   COUNT_OPEN_LOOPH
+000034 6E??           00315         movwf   COUNT_OPEN_LOOPL
+                      00316                 
+000036 8CF2           00317         bsf             INTCON,PEIE     ;Port interrupts enable
+000038 8EF2           00318         bsf             INTCON,GIE      ;Global interrupt enable
+                      00319 
+00003A 8A??           00320         bsf             FLAGS1,FWD_REV
+00003C 6A??           00321         clrf    OVDCOND_TEMP
+                      00322 ;*******************************************************************
+00003E                00323 MAIN_LOOP
+00003E A2??           00324         btfss   FLAGS_SRLS,SWITCH_SENSORLESS            
+000040 D???           00325         bra             KEEP_SAME_PWM   
+000042 AC??           00326         btfss   FLAGS,CALC_PWM
+000044 D???           00327         bra             KEEP_SAME_PWM   
+000046 EC?? F???      00328         call    UPDATE_PWM
+00004A 9C??           00329         bcf             FLAGS,CALC_PWM
+                      00330 
+00004C                00331 KEEP_SAME_PWM   
+00004C EC?? F???      00332         call    KEY_CHECK
+000050 EC?? F???      00333         call    PROCESS_KEY_PRESSED
+                      00334 
+000054 B0??           00335         btfsc   FLT_FLAGS,OCUR  
+000056 EC?? F???      00336         call    FAULTA_PROCESS
+                      00337 
+00005A B2??           00338         btfsc   FLAGS,FLAG_FAULT
+00005C EC?? F???      00339         call    TOGGLE_LEDS
+                      00340         
+000060 A2C2           00341         btfss   ADCON0,GO       
+000062 82C2           00342         bsf             ADCON0,GO       ;Set GO bit for ADC conversion start    
+                      00343 
+000064 EF?? F???      00344         goto    MAIN_LOOP
+                      00345 ;--------------------------------------------------------------
+000068                00346 ISR_HIGH
+000068 B0??           00347         btfsc   FLAGS_SRLS,IC_ALOWED
+00006A D???           00348         bra             BYPASS_IC_INT
+00006C B2A4           00349         btfsc   PIR3,IC1IF
+00006E D???           00350         bra             HALL_A_HIGH
+                      00351 ;       btfsc   PIR3,IC2QEIF
+                      00352 ;       bra             HALL_B_HIGH
+                      00353 ;       btfsc   PIR3,IC3DRIF
+                      00354 ;       bra             HALL_C_HIGH
+000070                00355 BYPASS_IC_INT
+000070 B09E           00356         btfsc   PIR1,TMR1IF
+000072 D???           00357         bra             TIMER1_INT
+                      00358 
+000074 BC9E           00359         btfsc   PIR1,ADIF
+000076 D???           00360         bra             AD_CONV_COMPLETE        
+                      00361 
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 11
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000078 B8A4           00362         btfsc   PIR3,PTIF
+00007A D???           00363         bra             PWM_INTERRUPT
+                      00364         
+00007C 0011           00365         RETFIE  FAST
+                      00366 
+                      00367 ;******************************************************************
+00007E                00368 AD_CONV_COMPLETE                        ;ADC interrupt
+                      00369         
+00007E CFC3 F???      00370         movff   ADRESL,CURRENT_UL       ;Sample A = Iu
+000082 CFC4 F???      00371         movff   ADRESH,CURRENT_UH
+                      00372 
+000086 CFC3 F???      00373         movff   ADRESL,SPEED_REFL       ;Sample B = speed ref
+00008A CFC4 F???      00374         movff   ADRESH,SPEED_REFH       
+                      00375         
+00008E 8C??           00376         bsf             FLAGS,CALC_PWM
+000090 9C9E           00377         bcf             PIR1,ADIF               ;ADIF flag is cleared for next interrupt
+000092 0011           00378         RETFIE  FAST            
+                      00379 
+                      00380 ;******************************************************************
+000094                00381 HALL_A_HIGH
+000094 92A4           00382         bcf             PIR3,IC1IF
+000096 6A??           00383         clrf    LOCK_ROTOR_COUNT
+                      00384 ;       movf    CAP1BUFL,W
+                      00385 ;       addwf   VELOCITY_READL,F        ;Capture Timer5 count and avarage the count 
+                      00386 ;       movf    CAP1BUFH,W
+                      00387 ;       addwfc  VELOCITY_READH,F
+                      00388 ;       bcf             STATUS,C
+                      00389 ;       rrcf    VELOCITY_READH,F
+                      00390 ;       rrcf    VELOCITY_READL,F
+000098 EC?? F???      00391         call    CHECK_SEQUENCE          ;UPDATE_SEQUENCE                ;Update the commutation sequence
+                             
+00009C 0011           00392         RETFIE  FAST
+                      00393 
+00009E                00394 HALL_B_HIGH
+00009E 94A4           00395         bcf             PIR3,IC2QEIF
+0000A0 5066           00396         movf    CAP2BUFL,W
+0000A2 26??           00397         addwf   VELOCITY_READL,F
+0000A4 5067           00398         movf    CAP2BUFH,W
+0000A6 22??           00399         addwfc  VELOCITY_READH,F
+0000A8 90D8           00400         bcf             STATUS,C
+0000AA 32??           00401         rrcf    VELOCITY_READH,F
+0000AC 32??           00402         rrcf    VELOCITY_READL,F
+0000AE EC?? F???      00403         call    CHECK_SEQUENCE          ;UPDATE_SEQUENCE
+0000B2 0011           00404         RETFIE  FAST
+                      00405 
+                      00406 
+0000B4                00407 HALL_C_HIGH
+0000B4 96A4           00408         bcf             PIR3,IC3DRIF    
+0000B6 5064           00409         movf    CAP3BUFL,W
+0000B8 26??           00410         addwf   VELOCITY_READL,F
+0000BA 5065           00411         movf    CAP3BUFH,W
+0000BC 22??           00412         addwfc  VELOCITY_READH,F
+0000BE 90D8           00413         bcf             STATUS,C
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 12
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0000C0 32??           00414         rrcf    VELOCITY_READH,F
+0000C2 32??           00415         rrcf    VELOCITY_READL,F
+0000C4 EC?? F???      00416         call    CHECK_SEQUENCE          ;UPDATE_SEQUENCE
+0000C8 0011           00417         RETFIE  FAST
+                      00418 
+                      00419 ;-----------------------------------------
+0000CA                00420 CHECK_SEQUENCE
+0000CA 8E??           00421         bsf             FLAGS_SRLS,PC_COM
+                      00422 
+0000CC A6??           00423         btfss   FLAGS_SRLS,OPEN_SPEED_STEP2
+0000CE 0012           00424         return
+0000D0 B2??           00425         btfsc   FLAGS_SRLS,SWITCH_SENSORLESS            
+0000D2 D???           00426         bra             SENSERLESS_ON
+0000D4 3E??           00427         incfsz  COUNT_OPEN_LOOPH,F
+0000D6 0012           00428         return
+0000D8 82??           00429         bsf             FLAGS_SRLS,SWITCH_SENSORLESS
+0000DA 0E3A           00430         movlw   b'00111010'
+0000DC 6E60           00431         movwf   DFLTCON
+0000DE 0012           00432         return
+0000E0                00433 SENSERLESS_ON
+0000E0 80??           00434         bsf             FLAGS_SRLS,IC_ALOWED
+0000E2 92A3           00435         bcf             PIE3,IC1IE              ;Cap1 interrupt
+                      00436 
+                      00437 
+                      00438 ;Timer1 value = FFFF-Velocity reg/2 for 30 degrees 
+                      00439 ;       bcf             STATUS,C
+                      00440 ;       rrcf    VELOCITY_READH,F
+                      00441 ;       rrcf    VELOCITY_READL,F        
+                      00442 ;       bcf             STATUS,C
+                      00443 ;       rrcf    VELOCITY_READH,F
+                      00444 ;       rrcf    VELOCITY_READL,F        
+                      00445 
+                      00446 ;       bsf             STATUS,C
+                      00447 ;       movlw   0xFF
+                      00448 ;       subfwb  VELOCITY_READL,F
+                      00449 ;       subfwb  VELOCITY_READH,F                        ;The Timer1 reload value stored in 
+0000E4 0EEA           00450         movlw   0xEA
+0000E6 6400           00451         cpfsgt  VELOCITY_READH,W
+0000E8 D???           00452         bra             LOWER_SPEED_LEVEL1
+0000EA 0E39           00453         movlw   b'00111001'
+0000EC 6E60           00454         movwf   DFLTCON
+0000EE 8882           00455         bsf             LED2
+0000F0 D???           00456         bra             CONTINUE_SPEED
+0000F2                00457 LOWER_SPEED_LEVEL1
+0000F2 0EE4           00458         movlw   0xE4
+0000F4 6400           00459         cpfsgt  VELOCITY_READH,W
+0000F6 D???           00460         bra             LOWER_SPEED_LEVEL2
+0000F8 0E3D           00461         movlw   b'00111101'
+0000FA 6E60           00462         movwf   DFLTCON
+0000FC 9882           00463         bcf             LED2
+0000FE D???           00464         bra             CONTINUE_SPEED
+000100                00465 LOWER_SPEED_LEVEL2
+000100 0E3E           00466         movlw   b'00111110'
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 13
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000102 6E60           00467         movwf   DFLTCON
+000104 7882           00468         btg             LED2
+000106                00469 CONTINUE_SPEED
+000106 C??? FFCF      00470         movff   VELOCITY_READH,TMR1H
+00010A C??? FFCE      00471         movff   VELOCITY_READL,TMR1L
+                      00472 
+                      00473 ;       movlw   0xE2    ;F1                     ;0xEC77 = 1mSec@20MHz
+                      00474 ;       movwf   TMR1H                   ;0xF1F0 = 720usec@20MHz
+                      00475 ;       movlw   0x50    ;F0
+                      00476 ;       movwf   TMR1L   
+                      00477 
+00010E 809D           00478         bsf     PIE1,TMR1IE
+                      00479 
+                      00480 
+000110 7682           00481         btg             LED3
+                      00482 
+                      00483 
+000112 0012           00484         return
+                      00485 
+                      00486 ;--------
+000114                00487 UPDATE_SEQUENCE
+                      00488 ;       btfss   FLAGS_SRLS,PHASE_SHIFT_READY
+                      00489 ;       return
+                      00490 ;       bcf             FLAGS_SRLS,PHASE_SHIFT_READY
+                      00491 
+                      00492 ;init table again
+000114 AA??           00493         btfss   FLAGS1,FWD_REV
+000116 D???           00494         bra             ITS_REVERSE
+000118 EE?? F0??      00495         lfsr    0,POSITION_TABLE_FWD
+00011C D???           00496         bra             PICK_FROM_TABLE
+00011E                00497 ITS_REVERSE
+00011E EE?? F0??      00498         lfsr    0,POSITION_TABLE_REV
+                      00499 ;--
+000122                00500 PICK_FROM_TABLE
+000122 5080           00501         movf    PORTA,W
+000124 1CE8           00502         comf    WREG,W          ;In forward direction, the BEMF ZC is inverted
+000126 0B1C           00503         andlw   0x1C            ;IC1/IC2/IC3
+000128 40E8           00504         rrncf   WREG,W
+00012A 40E8           00505         rrncf   WREG,W
+00012C 6E??           00506         movwf   BEMF_ZC
+00012E 50EB           00507         movf    PLUSW0,W
+000130 6E??           00508         movwf   OVDCOND_TEMP    
+                      00509 ;       bsf             LED3
+000132 0012           00510         return
+                      00511 
+                      00512 ;-------------------------------------------------------------
+000134                00513 TIMER1_INT
+000134 909E           00514         bcf             PIR1,TMR1IF
+000136 B2??           00515         btfsc   FLAGS_SRLS,SWITCH_SENSORLESS            
+000138 D???           00516         bra             SENSERLESS_T0INT
+00013A                00517 OPEN_LOOP_ACTIVE
+                      00518 
+00013A 90??           00519         bcf             FLAGS_SRLS,IC_ALOWED    
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 14
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00013C B6??           00520         btfsc   FLAGS_SRLS,OPEN_SPEED_STEP2
+00013E D???           00521         bra             OPEN_SPEED_STEP_2
+000140 0EB0           00522         movlw   LOW_OL_SPEEDH           ;0xD8F0 = 1.92mSec@20MHz/1000RPM
+000142 6ECF           00523         movwf   TMR1H
+000144 0EF0           00524         movlw   LOW_OL_SPEEDL
+000146 6ECE           00525         movwf   TMR1L   
+000148 EC?? F???      00526         call    SET_SEQUENCE_COUNT
+00014C 4A??           00527         infsnz  COUNT_OPEN_LOOPL,F
+00014E 86??           00528         bsf             FLAGS_SRLS,OPEN_SPEED_STEP2
+000150 0011           00529         retfie  FAST
+000152                00530 OPEN_SPEED_STEP_2
+000152 0ED8           00531         movlw   HIGH_OL_SPEEDH  ;B0             ;0xD8F0 = 1.92mSec@20MHz/1000RPM
+000154 6ECF           00532         movwf   TMR1H
+000156 0E78           00533         movlw   HIGH_OL_SPEEDL  ;F0
+000158 6ECE           00534         movwf   TMR1L   
+00015A EC?? F???      00535         call    SET_SEQUENCE_COUNT
+00015E 0011           00536         retfie  FAST
+                      00537 
+                      00538 
+000160                00539 SENSERLESS_T0INT
+                      00540 ;       bsf             FLTCONFIG,0
+                      00541 ;       bsf             FLTCONFIG,1
+                      00542 ;       bcf             LED3
+                      00543 
+                      00544 ;       bcf             LED3
+000160 90??           00545         bcf             FLAGS_SRLS,IC_ALOWED    
+                      00546 
+000162 82??           00547         bsf             FLAGS_SRLS,SWITCH_SENSORLESS            
+000164 EC?? F???      00548         call    UPDATE_SEQUENCE
+000168 C??? FF6B      00549         movff   OVDCOND_TEMP,OVDCOND
+                      00550 
+00016C C??? FFCF      00551         movff   VELOCITY_READH,TMR1H
+000170 C??? FFCE      00552         movff   VELOCITY_READL,TMR1L
+                      00553 
+                      00554 ;       btfsc   FLAGS_SRLS,PHASE_SHIFT_READY
+                      00555 ;       bra             BLOCK_IC_OVER
+                      00556 ;       bsf             FLAGS_SRLS,PHASE_SHIFT_READY
+                      00557 ;       call    UPDATE_SEQUENCE
+                      00558 ;       retfie  FAST
+                      00559         
+000174                00560 BLOCK_IC_OVER
+000174 82A3           00561         bsf             PIE3,IC1IE              ;Cap1 interrupt
+000176 809D           00562         bsf             PIE1,TMR1IE
+                      00563 
+                      00564 ;       bsf             PIE3,IC2QEIE    ;Cap2 interrupt
+                      00565 ;       bsf             PIE3,IC3DRIE    ;Cap3 interrupt
+                      00566 ;       bcf             INTCON,TMR0IE
+                      00567 ;       bcf             PIE1,TMR1IE
+                      00568 ;       bcf             FLAGS_SRLS,IC_ALOWED
+                      00569 ;       bcf             FLAGS_SRLS,PHASE_SHIFT_READY
+                      00570 
+                      00571 
+000178 0011           00572         retfie  FAST
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 15
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00573 
+                      00574 ;******************************************************************
+00017A                00575 ISR_LOW
+                      00576 ;       btfsc           PIR3,PTIF
+                      00577 ;       bra             PWM_INTERRUPT
+00017A 0011           00578         RETFIE  FAST            
+                      00579 
+                      00580 ;******************************************************************
+00017C                00581 PWM_INTERRUPT
+00017C 98A4           00582         bcf             PIR3,PTIF
+00017E 4A??           00583         infsnz  LOCK_ROTOR_COUNT,F
+000180 6A6B           00584         clrf    OVDCOND
+                      00585 
+000182                00586 CHECK_OTHER_FAULTS
+000182 3E??           00587         incfsz  PWM_CYCLE_COUNT,F
+000184 D???           00588         bra             CHECK_FOR_FAULTS
+000186 6A??           00589         clrf    FAULTA_COUNT
+000188 D???           00590         bra             CHECK_PARAMETER_DISPLAY 
+                      00591         
+00018A                00592 CHECK_FOR_FAULTS
+                      00593 ;       btfss   FLTCONFIG,FLTAS
+00018A B282           00594         btfsc   PORTC,CURRENT_FAULT_INPUT
+00018C D???           00595         bra             CHECK_PARAMETER_DISPLAY 
+00018E 2A??           00596         incf    FAULTA_COUNT,F
+000190 0E20           00597         movlw   MAX_FLTA_COUNT
+000192 64??           00598         cpfsgt  FAULTA_COUNT
+000194 D???           00599         bra             CHECK_PARAMETER_DISPLAY 
+000196 926C           00600         bcf             FLTCONFIG,FLTAMOD
+000198 806C           00601         bsf             FLTCONFIG,FLTAEN
+00019A 80??           00602         bsf             FLT_FLAGS,OCUR
+                      00603 ;----------------------------------Old code
+00019C                00604 CHECK_PARAMETER_DISPLAY
+00019C 0011           00605         retfie  FAST
+00019E 0E4E           00606         movlw   CYCLE_COUNT_MAXH
+0001A0 62??           00607         cpfseq  CYCLE_COUNTH
+0001A2 D???           00608         bra             NOT_YET_THERE
+0001A4 0E20           00609         movlw   CYCLE_COUNT_MAXL
+0001A6 64??           00610         cpfsgt  CYCLE_COUNTL
+0001A8 D???           00611         bra             NOT_YET_THERE
+0001AA 84??           00612         bsf             FLAGS,PARAM_DISPLAY
+0001AC 6A??           00613         clrf    CYCLE_COUNTH
+0001AE 6A??           00614         clrf    CYCLE_COUNTL
+0001B0 B0??           00615         btfsc   FLT_FLAGS,OCUR
+0001B2 7A82           00616         btg             LED1
+0001B4 98A4           00617         bcf             PIR3,PTIF
+0001B6 0011           00618         retfie  FAST
+0001B8                00619 NOT_YET_THERE
+0001B8 3E??           00620         incfsz  CYCLE_COUNTL,F
+0001BA 0011           00621         retfie  FAST
+0001BC 2A??           00622         incf    CYCLE_COUNTH,F
+0001BE 98A4           00623         bcf             PIR3,PTIF
+0001C0 0011           00624         retfie  FAST
+                      00625 
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 16
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00626 ;******************************************************************
+0001C2                00627 UPDATE_PWM
+0001C2 0E40           00628         movlw   0x40    ;20
+0001C4 64??           00629         cpfsgt  SPEED_REFH      
+0001C6 D???           00630         bra             RESET_DUTY_CYCLE
+                      00631 
+0001C8 0E40           00632         movlw   0x40    ;0x80   ;66     ;40
+0001CA 26??           00633         addwf   SPEED_REFH,F
+0001CC A0D8           00634         btfss   STATUS,C
+0001CE D???           00635         bra             SPEED_REF_OK
+0001D0 0EFF           00636         movlw   0xFF
+0001D2 6E??           00637         movwf   SPEED_REFH
+0001D4                00638 SPEED_REF_OK    
+0001D4 0EFD           00639         movlw   0xFD
+0001D6 60??           00640         cpfslt  SPEED_REFH      
+0001D8 6E??           00641         movwf   SPEED_REFH
+                      00642 
+0001DA EC?? F???      00643         call    CALCULATE_TIME_60DEG
+                      00644 
+                      00645 ;PWM = [(MotorVoltage/DCbus voltage)*(PTPER*4)]*[SpeedRef/255] *16
+                      00646 ;16 is the multiplication factor
+0001DE 50??           00647         movf    SPEED_REFH,W    
+0001E0 0D4F           00648         mullw   (MAIN_PWM_CONSTANT)
+0001E2 38F3           00649         swapf   PRODL,W
+0001E4 0B0F           00650         andlw   0x0F
+0001E6 6E??           00651         movwf   PDC_TEMPL
+0001E8 38F4           00652         swapf   PRODH,W
+0001EA 0BF0           00653         andlw   0xF0
+0001EC 12??           00654         iorwf   PDC_TEMPL,F
+0001EE 38F4           00655         swapf   PRODH,W
+0001F0 0B0F           00656         andlw   0x0F
+0001F2 6E??           00657         movwf   PDC_TEMPH
+                      00658  
+0001F4 826E           00659         bsf             PWMCON1,UDIS    ;Disable the PWM buffer update
+                      00660 
+0001F6 50??           00661         movf    PDC_TEMPH,W
+0001F8 6E78           00662         movwf   PDC0H
+0001FA 6E76           00663         movwf   PDC1H
+0001FC 6E74           00664         movwf   PDC2H   
+                      00665 ;       movwf   PDC3H   
+                      00666 
+0001FE 50??           00667         movf    PDC_TEMPL,W
+000200 6E79           00668         movwf   PDC0L   
+000202 6E77           00669         movwf   PDC1L
+000204 6E75           00670         movwf   PDC2L
+                      00671 ;       movwf   PDC3L
+                      00672 
+000206 926E           00673         bcf             PWMCON1,UDIS    ;Disable the PWM buffer update
+                      00674 
+000208 0012           00675         RETURN
+                      00676 
+                      00677 
+                      00678 
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 17
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00679 ;---------------------------------------------
+00020A                00680 RESET_DUTY_CYCLE
+00020A 6A78           00681         clrf    PDC0H
+00020C 6A76           00682         clrf    PDC1H
+00020E 6A74           00683         clrf    PDC2H
+                      00684 ;       clrf    PDC3H   
+000210 6A79           00685         clrf    PDC0L
+000212 6A77           00686         clrf    PDC1L
+000214 6A75           00687         clrf    PDC2L
+                      00688 ;       clrf    PDC3L
+                      00689 
+                      00690 ;       call    UPDATE_SEQUENCE
+000216 0012           00691         RETURN
+                      00692 
+                      00693 ;---------------------------------------------
+000218                00694 CALCULATE_TIME_60DEG
+000218 0E63           00695         movlw   0x63
+00021A 5C??           00696         subwf   SPEED_REFH,W    ;offset
+00021C 0D9D           00697         mullw   0x9D    ;39.2*4
+00021E 90D8           00698         bcf             STATUS,C
+000220 32F4           00699         rrcf    PRODH,F         ;/4
+000222 32F3           00700         rrcf    PRODL,F                         
+000224 90D8           00701         bcf             STATUS,C
+000226 32F4           00702         rrcf    PRODH,F
+000228 32F3           00703         rrcf    PRODL,F                         
+                      00704 ;FFFF - (10,000 - 39.2 X (ADC-64h))
+00022A 90D8           00705         bcf             STATUS,C
+00022C 0EEF           00706         movlw   0xEF
+00022E 22F3           00707         addwfc  PRODL,F
+000230 0ED8           00708         movlw   0xD8
+000232 22F4           00709         addwfc  PRODH,F
+000234 CFF4 F???      00710         movff   PRODH,VELOCITY_READH
+000238 CFF3 F???      00711         movff   PRODL,VELOCITY_READL
+00023C 0012           00712         return
+                      00713 ;******************************************************************
+00023E                00714 FAULTA_PROCESS
+00023E 8A82           00715         bsf             LED1
+000240 8882           00716         bsf             LED2
+000242 8682           00717         bsf             LED3
+                      00718 
+000244 82??           00719         bsf             FLAGS,FLAG_FAULT
+000246 EC?? F???      00720         call    STOP_MOTOR
+00024A 946C           00721         bcf             FLTCONFIG,FLTAS
+00024C 90??           00722         bcf             FLT_FLAGS,OCUR
+00024E 96??           00723         bcf             FLAGS1,KEY_PRESSED
+000250 92??           00724         bcf             FLAGS1,KEY_RS
+000252 98??           00725         bcf             FLAGS1,RUN_STOP 
+000254 0012           00726         return  
+                      00727 
+                      00728 ;******************************************************************
+000256                00729 INIT_PERPHERALS
+                      00730 
+                      00731 ;Init ADC 
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 18
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00732 
+000256 0E11           00733         movlw   b'00010001'
+000258 6EC2           00734         movwf   ADCON0
+00025A 0E10           00735         movlw   b'00010000'
+00025C 6EC1           00736         movwf   ADCON1
+00025E 0E32           00737         movlw   b'00110010'
+000260 6EC0           00738         movwf   ADCON2
+000262 0E80           00739         movlw   b'10000000'
+000264 6E9A           00740         movwf   ADCON3
+000266 0E00           00741         movlw   b'00000000'  
+000268 6E99           00742         movwf   ADCHS
+00026A 0E03           00743         movlw   b'00000011'     
+00026C 6EB8           00744         movwf   ANSEL0
+00026E 0E00           00745         movlw   b'00000000'
+000270 6EB9           00746         movwf   ANSEL1
+                      00747 
+                      00748 ;-----------------------------------------------------------------
+                      00749 ;Init PWM
+                      00750         
+000272 0E00           00751         movlw   b'00000000'
+000274 6E7F           00752         movwf   PTCON0
+                      00753         
+000276 0E37           00754         movlw   0x37    ; 20KHz = 0xFA          ;20KHz of PWM frequency                 
+000278 6E7B           00755         movwf   PTPERL  ;16KHz = 0x137
+                      00756                                         ;12KHz = 0x1A0  
+00027A 0E01           00757         movlw   0x01
+00027C 6E7A           00758         movwf   PTPERH
+                      00759         
+00027E 0E4F           00760         movlw   b'01001111'     ;PWM0-5 enabled in independent mode
+000280 6E6F           00761         movwf   PWMCON0
+                      00762         
+000282 0E01           00763         movlw   b'00000001'     ;Output overides synched wrt PWM timebase
+000284 6E6E           00764         movwf   PWMCON1
+                      00765         
+000286 0E00           00766         movlw   b'00000000'     ;
+000288 6E6D           00767         movwf   DTCON
+                      00768         
+00028A 0E00           00769         movlw   b'00000000'     ;PWM0-5 PWM Duty cycle on overide 
+00028C 6E6B           00770         movwf   OVDCOND
+                      00771         
+00028E 0E00           00772         movlw   b'00000000'     ; All PWMs = 0 on init
+000290 6E6A           00773         movwf   OVDCONS
+                      00774         
+000292 0EB3           00775         movlw   b'10110011'     ;Faults on 
+000294 0E80           00776         movlw   b'10000000'     ;Faults on 
+000296 6E6C           00777         movwf   FLTCONFIG
+                      00778         
+000298 0E00           00779         movlw   0x00
+00029A 6E71           00780         movwf   SEVTCMPL
+00029C 0E00           00781         movlw   0x00
+00029E 6E70           00782         movwf   SEVTCMPH
+                      00783 
+0002A0 6A79           00784         clrf    PDC0L   
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 19
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0002A2 6A77           00785         clrf    PDC1L   
+0002A4 6A75           00786         clrf    PDC2L   
+                      00787 ;       clrf    PDC3L   
+0002A6 6A78           00788         clrf    PDC0H   
+0002A8 6A76           00789         clrf    PDC1H   
+0002AA 6A74           00790         clrf    PDC2H   
+                      00791 ;       clrf    PDC3H   
+                      00792 
+0002AC 0E80           00793         movlw   b'10000000'             ;PWM timer ON
+0002AE 6E7E           00794         movwf   PTCON1
+                      00795 ;-----------------------------------------------------------------
+                      00796 ;init Hall @ IC1/IC2/IC3, Timer5
+0002B0 8492           00797         bsf             TRISA,2
+0002B2 8692           00798         bsf             TRISA,3
+0002B4 8892           00799         bsf             TRISA,4
+0002B6 0E01           00800         movlw   b'00000001'     ;1:1
+0002B8 6EB7           00801         movwf   T5CON
+                      00802 ;       movlw   b'01001000'     ;Cap1/2/3-capture every input state change
+0002BA 0E02           00803         movlw   b'00000010'
+0002BC 6E63           00804         movwf   CAP1CON
+                      00805 ;       movlw   b'01001000'
+0002BE 0E00           00806         movlw   b'00000000'
+0002C0 6E62           00807         movwf   CAP2CON
+                      00808 ;       movlw   b'01001000'
+0002C2 0E00           00809         movlw   b'00000000'
+0002C4 6E61           00810         movwf   CAP3CON
+0002C6 0E3A           00811         movlw   b'00111010'
+0002C8 6E60           00812         movwf   DFLTCON
+0002CA 0E00           00813         movlw   b'00000000'     ;Disable QEI
+0002CC 6EB6           00814         movwf   QEICON
+                      00815 
+                      00816 ;-----------------------------------------------------------------
+                      00817 ;init PORTC
+0002CE 0E07           00818         movlw   TRISC_VALUE
+0002D0 6E94           00819         movwf   TRISC
+                      00820 
+                      00821 ;-----------------------------------------------------------------
+                      00822 ;init Timer1
+0002D2 0E81           00823         movlw   b'10000001'
+0002D4 6ECD           00824         movwf   T1CON
+0002D6 0EC3           00825         movlw   0xC3            ;0xC350 = 10mSec@20MHz
+0002D8 6ECF           00826         movwf   TMR1H
+0002DA 0EFF           00827         movlw   0xFF
+0002DC 6ECE           00828         movwf   TMR1L
+                      00829 ;-----------------------------------------------------------------
+0002DE                00830 LOAD_SEQUENCE_TABLE
+                      00831  
+                      00832 ;Forward sequence
+0002DE 0E00           00833         movlw   POSITION01
+0002E0 6E??           00834         movwf   POSITION_TABLE_FWD
+0002E2 0E21           00835         movlw   POSITION61
+0002E4 6E??           00836         movwf   POSITION_TABLE_FWD+1
+0002E6 0E06           00837         movlw   POSITION51
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 20
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0002E8 6E??           00838         movwf   POSITION_TABLE_FWD+2
+0002EA 0E24           00839         movlw   POSITION41
+0002EC 6E??           00840         movwf   POSITION_TABLE_FWD+3
+0002EE 0E18           00841         movlw   POSITION31
+0002F0 6E??           00842         movwf   POSITION_TABLE_FWD+4
+0002F2 0E09           00843         movlw   POSITION21
+0002F4 6E??           00844         movwf   POSITION_TABLE_FWD+5
+0002F6 0E12           00845         movlw   POSITION11
+0002F8 6E??           00846         movwf   POSITION_TABLE_FWD+6
+0002FA 0E00           00847         movlw   POSITION71
+0002FC 6E??           00848         movwf   POSITION_TABLE_FWD+7
+                      00849 ;Reverse sequence
+0002FE 0E00           00850         movlw   POSITION71
+000300 6E??           00851         movwf   POSITION_TABLE_REV
+000302 0E09           00852         movlw   POSITION21
+000304 6E??           00853         movwf   POSITION_TABLE_REV+1
+000306 0E24           00854         movlw   POSITION41
+000308 6E??           00855         movwf   POSITION_TABLE_REV+2
+00030A 0E21           00856         movlw   POSITION61
+00030C 6E??           00857         movwf   POSITION_TABLE_REV+3
+00030E 0E12           00858         movlw   POSITION11
+000310 6E??           00859         movwf   POSITION_TABLE_REV+4
+000312 0E18           00860         movlw   POSITION31
+000314 6E??           00861         movwf   POSITION_TABLE_REV+5
+000316 0E06           00862         movlw   POSITION51
+000318 6E??           00863         movwf   POSITION_TABLE_REV+6
+00031A 0E00           00864         movlw   POSITION01
+00031C 6E??           00865         movwf   POSITION_TABLE_REV+7
+                      00866 ;-----------------------------------------------------------------
+00031E 6A??           00867         clrf    SPEED_REFH
+000320 6A??           00868         clrf    CURRENT_UH      
+000322 6A??           00869         clrf    CURRENT_UL      
+000324 6A??           00870         clrf    FLAGS_SRLS
+                      00871 ;-----------------------------------------------------------------
+000326                00872 INITIALIZE_SERIAL_PORT
+                      00873 
+000326 0E81           00874         movlw   0x81            ;Baudrate = 9600
+000328 6EAF           00875         movwf   SPBRG
+                      00876         
+00032A 0E24           00877         movlw   0x24            ;8-bit transmission;Enable Transmission;        
+00032C 6EAC           00878         movwf   TXSTA           ;Asynchronous mode with High speed transmission
+                      00879         
+00032E 0E90           00880         movlw   0x90            ;Enable the serial port
+000330 6EAB           00881         movwf   RCSTA           ;with 8-bit continuous reception
+                      00882 
+000332 9C94           00883         bcf     TRISC,6
+000334 8E94           00884         bsf     TRISC,7
+                      00885 
+                      00886 ;------------------------------------------------------------------------
+                      00887 
+                      00888 ;init interrupts
+000336 8C9D           00889         bsf     PIE1,ADIE       ;AD Converter over Interrupt enable
+                      00890 
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 21
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00891 ;       bsf     PIE3,IC1IE              ;Cap1 interrupt
+                      00892 ;       bsf     PIE3,IC2QEIE    ;Cap2 interrupt
+                      00893 ;       bsf     PIE3,IC3DRIE    ;Cap3 interrupt
+000338 88A3           00894         bsf     PIE3,PTIE               ;PWM interrupt
+                      00895 ;       bsf     INTCON,TMR0IE
+00033A 809D           00896         bsf     PIE1,TMR1IE
+                      00897 
+                      00898 ;       bsf     INTCON,RBIE 
+                      00899 
+00033C 0E93           00900         movlw   0x093           ;Power ON reset status bit/Brownout reset status bit
+00033E 6ED0           00901         movwf   RCON            ;and Instruction flag bits are set
+                      00902                                 ;Priority level on Interrupots enabled
+                      00903 
+                      00904 ;       bsf     INTCON,PEIE     ;Port interrupts enable
+                      00905 ;       bsf     INTCON,GIE      ;Global interrupt enable
+                      00906 
+                      00907 
+000340 0012           00908         RETURN
+                      00909         
+                      00910 
+                      00911 ;*******************************************************************************
+                      00912 ;This routine checks for the keys status. 2 keys are checked, Run/Stop and 
+                      00913 ;Forward(FWD)/Reverse(REV)  
+                      00914 ;*******************************************************************************
+000342                00915 KEY_CHECK
+000342 B082           00916         btfsc   KEY_PORT,RUN_STOP_KEY                   ;Is key pressed "RUN/STOP"?
+000344 EF?? F???      00917         goto    CHECK_FWD_REV_KEY
+000348 B0??           00918         btfsc   FLAGS1,DEBOUNCE
+00034A 0012           00919         return
+00034C EC?? F???      00920         call    KEY_DEBOUNCE
+000350 A0??           00921         btfss   FLAGS1,DEBOUNCE
+000352 0012           00922         return
+000354 82??           00923         bsf             FLAGS1,KEY_RS
+000356 0012           00924         return
+                      00925         
+000358                00926 CHECK_FWD_REV_KEY
+000358 B482           00927         btfsc   KEY_PORT,FWD_REV_KEY                    ;Is key pressed "RUN/STOP"?
+00035A EF?? F???      00928         goto    SET_KEYS
+00035E B0??           00929         btfsc   FLAGS1,DEBOUNCE
+000360 0012           00930         return
+000362 EC?? F???      00931         call    KEY_DEBOUNCE
+000366 A0??           00932         btfss   FLAGS1,DEBOUNCE
+000368 0012           00933         return
+00036A 84??           00934         bsf             FLAGS1,KEY_FR
+00036C 0012           00935         return
+                      00936 
+00036E                00937 SET_KEYS
+00036E A0??           00938         btfss   FLAGS1,DEBOUNCE
+000370 0012           00939         return
+000372 90??           00940         bcf             FLAGS1,DEBOUNCE
+000374 86??           00941         bsf             FLAGS1,KEY_PRESSED      
+000376 A2??           00942         btfss   FLAGS1,KEY_RS
+000378 D???           00943         bra             ITS_FWD_REV     
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 22
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00037A 78??           00944         btg             FLAGS1,RUN_STOP
+00037C 0012           00945         return
+00037E                00946 ITS_FWD_REV     
+00037E 7A??           00947         btg             FLAGS1,FWD_REV
+000380 0012           00948         return
+                      00949 
+                      00950 
+                      00951 ;*******************************************************************************
+000382                00952 KEY_DEBOUNCE
+000382 2E??           00953         decfsz  DEBOUNCE_COUNTER,F
+000384 0012           00954         return
+000386 80??           00955         bsf             FLAGS1,DEBOUNCE
+000388 0E8F           00956         movlw   DEBOUNCE_COUNT
+00038A 6E??           00957         movwf   DEBOUNCE_COUNTER
+00038C 0012           00958         return
+                      00959 ;*******************************************************************************
+00038E                00960 PROCESS_KEY_PRESSED
+00038E A6??           00961         btfss   FLAGS1,KEY_PRESSED
+000390 0012           00962         return
+000392 A2??           00963         btfss   FLAGS1,KEY_RS
+000394 EF?? F???      00964         goto    CHECK_FWD_REV
+000398 A8??           00965         btfss   FLAGS1,RUN_STOP 
+00039A EF?? F???      00966         goto    STOP_MOTOR_NOW
+00039E EC?? F???      00967         call    RUN_MOTOR_AGAIN
+0003A2 96??           00968         bcf             FLAGS1,KEY_PRESSED
+0003A4 92??           00969         bcf             FLAGS1,KEY_RS
+                      00970 
+0003A6 8A82           00971         bsf             LED_PORT,RUN_STOP_LED   
+0003A8 0012           00972         return
+                      00973 
+0003AA                00974 STOP_MOTOR_NOW
+0003AA EC?? F???      00975         call    STOP_MOTOR              ;STOP motor
+0003AE 96??           00976         bcf             FLAGS1,KEY_PRESSED
+0003B0 92??           00977         bcf             FLAGS1,KEY_RS
+0003B2 9A82           00978         bcf             LED_PORT,RUN_STOP_LED   
+0003B4 0012           00979         return
+                      00980 
+0003B6                00981 CHECK_FWD_REV
+0003B6 A4??           00982         btfss   FLAGS1,KEY_FR
+0003B8 0012           00983         return
+                      00984 
+0003BA 7882           00985         btg             LED_PORT,FWD_REV_LED    
+                      00986 
+0003BC 9A82           00987         bcf             LED_PORT,RUN_STOP_LED   
+0003BE EC?? F???      00988         call    STOP_MOTOR
+                      00989 
+0003C2 EC?? F???      00990         call    DELAY
+                      00991 
+0003C6 EC?? F???      00992         call    RUN_MOTOR_AGAIN
+0003CA 96??           00993         bcf             FLAGS1,KEY_PRESSED
+0003CC 94??           00994         bcf             FLAGS1,KEY_FR
+0003CE 8A82           00995         bsf             LED_PORT,RUN_STOP_LED   
+0003D0 0012           00996         return
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 23
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00997 
+                      00998 ;*******************************************************************************
+                      00999 ;This routine stops the motor by driving the PWMs to 0% duty cycle.
+                      01000 ;*******************************************************************************
+0003D2                01001 STOP_MOTOR
+0003D2 9C9D           01002         bcf             PIE1,ADIE
+0003D4 92A3           01003         bcf             PIE3,IC1IE              ;Velocity capture
+0003D6 96A3           01004         bcf             PIE3,IC3DRIE    ;Diection change
+0003D8 94A3           01005         bcf             PIE3,IC2QEIE    ;QEI interrupt
+0003DA 98A3           01006         bcf             PIE3,PTIE               ;PWM interrupt
+0003DC 909D           01007         bcf             PIE1,TMR1IE
+                      01008 
+0003DE 6A6B           01009         clrf    OVDCOND         ;STOP motor
+0003E0 6A78           01010         clrf    PDC0H
+0003E2 6A76           01011         clrf    PDC1H
+0003E4 6A74           01012         clrf    PDC2H   
+                      01013 ;       clrf    PDC3H   
+0003E6 6A79           01014         clrf    PDC0L   
+0003E8 6A77           01015         clrf    PDC1L
+0003EA 6A75           01016         clrf    PDC2L
+                      01017 ;       clrf    PDC3L
+0003EC 9C??           01018         bcf             FLAGS,CALC_PWM
+0003EE 6A??           01019         clrf    SPEED_REFH
+0003F0 0012           01020         return
+                      01021 ;*******************************************************************************
+                      01022 ;This routine starts motor from previous stop with motor parameters initialized
+                      01023 ;*******************************************************************************
+0003F2                01024 RUN_MOTOR_AGAIN
+0003F2 88??           01025         bsf             FLAGS1,RUN_STOP 
+                      01026 ;       bcf             FLAGS,FLAG_FAULT
+                      01027 ;-----------------------------------------------------------------
+0003F4 6A??           01028         clrf    SPEED_REFH
+0003F6 6A??           01029         clrf    CURRENT_UH      
+0003F8 6A??           01030         clrf    CURRENT_UL      
+                      01031 
+                      01032 ;-----------------------------------------------------------------
+                      01033 
+                      01034 
+0003FA 8C9D           01035         bsf             PIE1,ADIE
+0003FC 82A3           01036         bsf             PIE3,IC1IE              ;Velocity capture
+                      01037 ;       bsf             PIE3,IC3DRIE    ;Diection change
+                      01038 ;       bsf             PIE3,IC2QEIE    ;QEI interrupt
+0003FE 809D           01039         bsf             PIE1,TMR1IE             ;enable T1 interrupt
+000400 88A3           01040         bsf             PIE3,PTIE               ;PWM interrupt
+                      01041 ;       bcf             IPR3,PTIP               ;PWM int low priority
+                      01042         
+                      01043 ;       bcf             FLAGS,POSITION_BIT
+000402 6A??           01044         clrf    FLAGS
+                      01045 
+000404 0E80           01046         movlw   b'10000000'     ;Faults on 
+000406 6E6C           01047         movwf   FLTCONFIG
+000408 90??           01048         bcf             FLT_FLAGS,OCUR
+00040A 92??           01049         bcf             FLT_FLAGS,OVOLT
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 24
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00040C 94??           01050         bcf             FLT_FLAGS,OTEMP
+                      01051 
+00040E 6A??           01052         clrf    FLAGS_SRLS
+                      01053 ;       clrf    COUNT_OPEN_LOOPL
+                      01054 ;       clrf    COUNT_OPEN_LOOPH
+                      01055 ;       call    UPDATE_SEQUENCE
+                      01056 
+000410 6A??           01057         clrf    OVDCOND_TEMP
+                      01058 
+000412 0EF0           01059         movlw   0xF0
+000414 6E??           01060         movwf   COUNT_OPEN_LOOPH
+000416 6E??           01061         movwf   COUNT_OPEN_LOOPL
+000418 0012           01062         return
+                      01063 
+                      01064 
+                      01065 ;---------------------------------
+00041A                01066 TOGGLE_LEDS
+                      01067 
+00041A 3E??           01068         incfsz  COUNTER_SP,F
+00041C 0012           01069         return
+00041E 3E??           01070         incfsz  COUNTER_SP1,F
+000420 0012           01071         return
+000422 7A82           01072         btg             LED1
+000424 7882           01073         btg             LED2
+000426 7682           01074         btg             LED3
+                      01075 
+000428 0012           01076         return
+                      01077 ;------------------------------------------
+00042A                01078 FIRST_ADC_INIT
+00042A 0E27           01079         movlw   b'00100111'
+00042C 6EC2           01080         movwf   ADCON0
+00042E 0E00           01081         movlw   b'00000000'
+000430 6EC1           01082         movwf   ADCON1
+000432 0E32           01083         movlw   b'00110010'
+000434 6EC0           01084         movwf   ADCON2
+000436 0E00           01085         movlw   b'00000000'
+000438 6E9A           01086         movwf   ADCON3
+00043A 0E00           01087         movlw   b'00000000' 
+00043C 6E99           01088         movwf   ADCHS
+00043E 0E02           01089         movlw   b'00000010'     
+000440 6EB8           01090         movwf   ANSEL0
+000442 0E00           01091         movlw   b'00000000'
+000444 6EB9           01092         movwf   ANSEL1
+                      01093 
+                      01094 
+000446 0E07           01095         movlw   TRISC_VALUE
+000448 6E94           01096         movwf   TRISC
+                      01097 
+00044A 0012           01098         return
+                      01099         
+00044C                01100 LED_BLINK
+00044C 9A82           01101         bcf             LED1
+00044E 9882           01102         bcf             LED2
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 25
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000450 9682           01103         bcf             LED3
+                      01104 
+000452 0E40           01105         movlw   0X40
+000454 64C4           01106         cpfsgt  ADRESH  
+000456 0012           01107         return
+000458 8A82           01108         bsf             LED1
+00045A 0E80           01109         movlw   0x80
+00045C 64C4           01110         cpfsgt  ADRESH
+00045E 0012           01111         return
+000460 8882           01112         bsf             LED2
+000462 0ED0           01113         movlw   0XD0
+000464 64C4           01114         cpfsgt  ADRESH  
+000466 0012           01115         return
+000468 8682           01116         bsf             LED3
+00046A 0012           01117         return
+                      01118 
+                      01119 ;*******************************************************************************
+00046C                01120 SET_SEQUENCE_COUNT
+00046C EC?? F???      01121         call    OPEN_LOOP_PWM
+                      01122 
+000470 AA??           01123         btfss   FLAGS1,FWD_REV
+000472 D???           01124         bra             RUN_REVERSE
+                      01125 
+000474 0E05           01126         movlw   0x5                                     ;Check for the last value on the table
+000476 60??           01127         cpfslt  TABLE_OFFSET
+000478 D???           01128         bra             CLEAR_OFFSET
+00047A 2A??           01129         incf    TABLE_OFFSET,F          ;Increment offset1
+00047C D???           01130         bra             LOAD_SEQUENCE_COUNT
+00047E                01131 CLEAR_OFFSET
+00047E 6A??           01132         clrf    TABLE_OFFSET
+000480 D???           01133         bra             LOAD_SEQUENCE_COUNT
+000482                01134 RUN_REVERSE
+000482 06??           01135         decf    TABLE_OFFSET,F          ;Increment offset1
+000484 B0D8           01136         btfsc   STATUS,C
+000486 D???           01137         bra             LOAD_SEQUENCE_COUNT
+000488                01138 LOAD_OFFSET
+000488 0E05           01139         movlw   0x5     
+00048A 6E??           01140         movwf   TABLE_OFFSET
+                      01141 
+00048C                01142 LOAD_SEQUENCE_COUNT
+00048C 50??           01143         movf    TABLE_OFFSET,W
+00048E A4D8           01144         btfss   STATUS,Z
+000490 D???           01145         bra             NEXT_TEST1
+                      01146 ;       btfss   FLAGS1,FWD_REV
+                      01147 ;       bra             OPEN_STP_0_REV
+000492 0E12           01148         movlw   POSITION1
+000494 6E6B           01149         movwf   OVDCOND
+000496 6E??           01150         movwf   OVDCOND_TEMP
+000498 7A82           01151         btg             LED1
+00049A 0012           01152         return
+                      01153 ;OPEN_STP_0_REV
+                      01154 ;       movlw   POSITION5
+                      01155 ;       movwf   OVDCOND
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 26
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      01156 ;       movwf   OVDCOND_TEMP
+                      01157 ;       btg             LED2
+                      01158 ;       return
+                      01159 ;---
+00049C                01160 NEXT_TEST1
+00049C 50??           01161         movf    TABLE_OFFSET,W
+00049E 0801           01162         sublw   0x1
+0004A0 A4D8           01163         btfss   STATUS,Z
+0004A2 D???           01164         bra             NEXT_TEST2
+                      01165 ;       btfss   FLAGS1,FWD_REV
+                      01166 ;       bra             OPEN_STP_1_REV
+0004A4 0E18           01167         movlw   POSITION3
+0004A6 6E6B           01168         movwf   OVDCOND
+0004A8 6E??           01169         movwf   OVDCOND_TEMP
+0004AA 7A82           01170         btg             LED1
+0004AC 0012           01171         return
+                      01172 ;OPEN_STP_1_REV
+                      01173 ;       movlw   POSITION4
+                      01174 ;       movwf   OVDCOND
+                      01175 ;       movwf   OVDCOND_TEMP
+                      01176 ;       btg             LED2
+                      01177 ;       return
+                      01178 ;---
+0004AE                01179 NEXT_TEST2
+0004AE 50??           01180         movf    TABLE_OFFSET,W
+0004B0 0802           01181         sublw   0x2
+0004B2 A4D8           01182         btfss   STATUS,Z
+0004B4 D???           01183         bra             NEXT_TEST3
+                      01184 ;       btfss   FLAGS1,FWD_REV
+                      01185 ;       bra             OPEN_STP_2_REV
+0004B6 0E09           01186         movlw   POSITION2
+0004B8 6E6B           01187         movwf   OVDCOND
+0004BA 6E??           01188         movwf   OVDCOND_TEMP
+0004BC 7A82           01189         btg             LED1
+0004BE 0012           01190         return
+                      01191 ;OPEN_STP_2_REV
+                      01192 ;       movlw   POSITION6
+                      01193 ;       movwf   OVDCOND
+                      01194 ;       movwf   OVDCOND_TEMP
+                      01195 ;       btg             LED2
+                      01196 ;       return
+                      01197 ;---
+0004C0                01198 NEXT_TEST3
+0004C0 50??           01199         movf    TABLE_OFFSET,W
+0004C2 0803           01200         sublw   0x3
+0004C4 A4D8           01201         btfss   STATUS,Z
+0004C6 D???           01202         bra             NEXT_TEST4
+                      01203 ;       btfss   FLAGS1,FWD_REV
+                      01204 ;       bra             OPEN_STP_3_REV
+0004C8 0E21           01205         movlw   POSITION6
+0004CA 6E6B           01206         movwf   OVDCOND
+0004CC 6E??           01207         movwf   OVDCOND_TEMP
+0004CE 7A82           01208         btg             LED1
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 27
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0004D0 0012           01209         return
+                      01210 ;OPEN_STP_3_REV
+                      01211 ;       movlw   POSITION2
+                      01212 ;       movwf   OVDCOND
+                      01213 ;       movwf   OVDCOND_TEMP
+                      01214 ;       btg             LED2
+                      01215 ;       return
+                      01216 ;---
+0004D2                01217 NEXT_TEST4
+0004D2 50??           01218         movf    TABLE_OFFSET,W
+0004D4 0804           01219         sublw   0x4
+0004D6 A4D8           01220         btfss   STATUS,Z
+0004D8 D???           01221         bra             NEXT_TEST5
+                      01222 ;       btfss   FLAGS1,FWD_REV
+                      01223 ;       bra             OPEN_STP_4_REV
+0004DA 0E24           01224         movlw   POSITION4
+0004DC 6E6B           01225         movwf   OVDCOND
+0004DE 6E??           01226         movwf   OVDCOND_TEMP
+0004E0 7A82           01227         btg             LED1
+0004E2 0012           01228         return
+                      01229 ;OPEN_STP_4_REV
+                      01230 ;       movlw   POSITION3
+                      01231 ;       movwf   OVDCOND
+                      01232 ;       movwf   OVDCOND_TEMP
+                      01233 ;       btg             LED2
+                      01234 ;       return
+                      01235 ;---
+0004E4                01236 NEXT_TEST5
+0004E4 50??           01237         movf    TABLE_OFFSET,W
+0004E6 0805           01238         sublw   0x5
+0004E8 A4D8           01239         btfss   STATUS,Z
+0004EA 0012           01240         return
+                      01241 ;       btfss   FLAGS1,FWD_REV
+                      01242 ;       bra             OPEN_STP_5_REV
+0004EC 0E06           01243         movlw   POSITION5
+0004EE 6E6B           01244         movwf   OVDCOND
+0004F0 6E??           01245         movwf   OVDCOND_TEMP
+0004F2 7A82           01246         btg             LED1
+0004F4 0012           01247         return
+                      01248 ;OPEN_STP_5_REV
+                      01249 ;       movlw   POSITION1
+                      01250 ;       movwf   OVDCOND
+                      01251 ;       movwf   OVDCOND_TEMP
+                      01252 ;       btg             LED2
+                      01253 ;       return
+                      01254         
+                      01255 
+                      01256 ;*******************************************************************************
+0004F6                01257 OPEN_LOOP_PWM
+                      01258 
+0004F6 0E64           01259         movlw   0x64
+0004F8 60??           01260         cpfslt  SPEED_REFH      
+0004FA D???           01261         bra             AAAAA
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 28
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0004FC 6A??           01262         clrf    PDC_TEMPL       
+0004FE 6A??           01263         clrf    PDC_TEMPH
+000500 D???           01264         bra             BBBBB   
+000502                01265 AAAAA
+000502 0EA5           01266         movlw   0xA5    
+000504 6E??           01267         movwf   PDC_TEMPL
+000506 0E03           01268         movlw   0x03    
+000508 6E??           01269         movwf   PDC_TEMPH
+00050A                01270 BBBBB
+00050A 826E           01271         bsf             PWMCON1,UDIS    ;Disable the PWM buffer update
+                      01272 
+00050C 50??           01273         movf    PDC_TEMPH,W
+00050E 6E78           01274         movwf   PDC0H
+000510 6E76           01275         movwf   PDC1H
+000512 6E74           01276         movwf   PDC2H   
+                      01277 ;       movwf   PDC3H   
+                      01278 
+000514 50??           01279         movf    PDC_TEMPL,W
+000516 6E79           01280         movwf   PDC0L   
+000518 6E77           01281         movwf   PDC1L
+00051A 6E75           01282         movwf   PDC2L
+                      01283 ;       movwf   PDC3L
+                      01284 
+00051C 926E           01285         bcf             PWMCON1,UDIS    ;Disable the PWM buffer update
+                      01286 
+00051E 0012           01287         RETURN
+                      01288 
+                      01289 
+                      01290 ;*******************************************************************************
+                      01291 
+000520                01292 SEND_DATA_TO_PC
+                      01293 
+                      01294 
+000520 9E??           01295         bcf             FLAGS_SRLS,PC_COM
+000522 0E0A           01296         movlw   0xA     ;new line
+000524 EC?? F???      01297         call    SEND_BYTE_FROM_WREG
+000528 0E0D           01298         movlw   0xD     ;carriage return
+00052A EC?? F???      01299         call    SEND_BYTE_FROM_WREG
+                      01300 
+00052E 50??           01301         movf    OVDCOND_TEMP,W  
+000530 0F41           01302         addlw   0x41
+000532 EC?? F???      01303         call    SEND_BYTE_FROM_WREG
+000536 50??           01304         movf    BEMF_ZC,W       
+000538 0F41           01305         addlw   0x41
+00053A EC?? F???      01306         call    SEND_BYTE_FROM_WREG
+                      01307 
+00053E 0012           01308         return
+                      01309 
+                      01310 
+                      01311 ;       movff   VELOCITY_READH,DISPLAY_TEMP1
+000540 C??? F???      01312         movff   OVDCOND_TEMP,DISPLAY_TEMP1
+000544 EC?? F???      01313         call    DISPLAY_DIGITS
+                      01314 ;       movff   VELOCITY_READL,DISPLAY_TEMP1
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 29
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000548 C??? F???      01315         movff   TABLE_OFFSET,DISPLAY_TEMP1
+00054C EC?? F???      01316         call    DISPLAY_DIGITS
+                      01317 
+000550 0012           01318         return
+                      01319 
+                      01320 ;---------------------------------------------------------
+000552                01321 DISPLAY_DIGITS
+000552 50??           01322         movf    DISPLAY_TEMP1,W
+000554 0BF0           01323         andlw   0xF0
+000556 38E8           01324         swapf   WREG,W
+000558 0F30           01325         addlw   0x30    
+00055A EC?? F???      01326         call    CHECK_39
+00055E EC?? F???      01327         call    SEND_BYTE_FROM_WREG
+000562 50??           01328         movf    DISPLAY_TEMP1,W
+000564 0B0F           01329         andlw   0x0F
+000566 0F30           01330         addlw   0x30    
+000568 EC?? F???      01331         call    CHECK_39
+00056C EC?? F???      01332         call    SEND_BYTE_FROM_WREG
+000570 0012           01333         RETURN
+                      01334 ;------------------------------
+000572                01335 CHECK_39
+000572 6E??           01336         movwf   DISPLAY_TEMP2
+000574 0E39           01337         movlw   0x39
+000576 64??           01338         cpfsgt  DISPLAY_TEMP2
+000578 D???           01339         bra             LESS_39
+00057A 50??           01340         movf    DISPLAY_TEMP2,W
+00057C 0F07           01341         addlw   0x7
+00057E 0012           01342         return
+000580                01343 LESS_39
+000580 50??           01344         movf    DISPLAY_TEMP2,W
+000582 0012           01345         return
+                      01346 ;------------------------------
+000584                01347 SEND_BYTE_FROM_WREG
+000584 A89E           01348         btfss   PIR1,TXIF
+000586 EF?? F???      01349         goto    SEND_BYTE_FROM_WREG
+00058A 6EAD           01350         movwf   TXREG
+00058C 0012           01351         return
+                      01352 
+                      01353 ;*******************************************************************************
+                      01354 ;Delay routine.
+                      01355 ;*******************************************************************************
+00058E                01356 DELAY
+00058E 0E01           01357         movlw   DELAY_COUNT1
+000590 6E??           01358         movwf   COUNTER
+000592                01359 dec_count       
+000592 0EFF           01360         movlw   DELAY_COUNT2
+000594 6E??           01361         movwf   COUNTER1
+000596                01362 dec_count1
+000596 2E??           01363         decfsz  COUNTER1,F
+000598 EF?? F???      01364         goto    dec_count1
+00059C 2E??           01365         decfsz  COUNTER,F
+00059E EF?? F???      01366         goto    dec_count
+0005A2 6A??           01367         clrf    COUNTER
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 30
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0005A4 6A??           01368         clrf    COUNTER1
+0005A6 0012           01369         return          
+                      01370 
+                      01371 
+                      01372 
+                      01373 
+                      01374 
+                      01375         END
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 31
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+A                                 00000000
+AAAAA                             00000502
+ABDEN                             00000000
+ACCESS                            00000000
+ACMOD0                            00000002
+ACMOD1                            00000003
+ACONV                             00000005
+ACQT0                             00000003
+ACQT1                             00000004
+ACQT2                             00000005
+ACQT3                             00000006
+ACSCH                             00000004
+ADCHS                             00000F99
+ADCON0                            00000FC2
+ADCON1                            00000FC1
+ADCON2                            00000FC0
+ADCON3                            00000F9A
+ADCS0                             00000000
+ADCS1                             00000001
+ADCS2                             00000002
+ADEN                              00000003
+ADFM                              00000007
+ADIE                              00000006
+ADIF                              00000006
+ADIP                              00000006
+ADON                              00000000
+ADPNT0                            00000000
+ADPNT1                            00000001
+ADRES                             00000FC3
+ADRESH                            00000FC4
+ADRESL                            00000FC3
+ADRS0                             00000006
+ADRS1                             00000007
+AD_CONV_COMPLETE                  0000007E
+AN0                               00000000
+AN1                               00000001
+AN2                               00000002
+AN3                               00000003
+AN4                               00000005
+ANS0                              00000000
+ANS1                              00000001
+ANS2                              00000002
+ANS3                              00000003
+ANS4                              00000004
+ANSEL0                            00000FB8
+ANSEL1                            00000FB9
+ARG1H                             0000002D
+ARG1L                             0000002E
+ARG2H                             0000002F
+ARG2L                             00000030
+BANKED                            00000001
+BAUDCON                           00000FAA
+BAUDCTL                           00000FAA
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 32
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+BBBBB                             0000050A
+BEMF_ZC                           0000003F
+BF                                00000000
+BFEMT                             00000003
+BFOVFL                            00000002
+BLOCK_IC_OVER                     00000174
+BOR                               00000000
+BRFEN                             00000007
+BRG16                             00000003
+BRGH                              00000002
+BSR                               00000FE0
+BYPASS_IC_INT                     00000070
+C                                 00000000
+CALCULATE_TIME_60DEG              00000218
+CALC_PWM                          6
+CAP1BUFH                          00000F69
+CAP1BUFL                          00000F68
+CAP1CON                           00000F63
+CAP1M0                            00000000
+CAP1M1                            00000001
+CAP1M2                            00000002
+CAP1M3                            00000003
+CAP1REN                           00000006
+CAP1TMR                           00000005
+CAP2BUFH                          00000F67
+CAP2BUFL                          00000F66
+CAP2CON                           00000F62
+CAP2M0                            00000000
+CAP2M1                            00000001
+CAP2M2                            00000002
+CAP2M3                            00000003
+CAP2REN                           00000006
+CAP2TMR                           00000005
+CAP3BUFH                          00000F65
+CAP3BUFL                          00000F64
+CAP3CON                           00000F61
+CAP3M0                            00000000
+CAP3M1                            00000001
+CAP3M2                            00000002
+CAP3M3                            00000003
+CAP3REN                           00000006
+CAP3TMR                           00000005
+CCP1                              00000002
+CCP1CON                           00000FBD
+CCP1IE                            00000002
+CCP1IF                            00000002
+CCP1IP                            00000002
+CCP1M0                            00000000
+CCP1M1                            00000001
+CCP1M2                            00000002
+CCP1M3                            00000003
+CCP1X                             00000005
+CCP1Y                             00000004
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 33
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+CCP2                              00000001
+CCP2CON                           00000FBA
+CCP2IE                            00000000
+CCP2IF                            00000000
+CCP2IP                            00000000
+CCP2M0                            00000000
+CCP2M1                            00000001
+CCP2M2                            00000002
+CCP2M3                            00000003
+CCP2X                             00000005
+CCP2Y                             00000004
+CCPR1                             00000FBE
+CCPR1H                            00000FBF
+CCPR1L                            00000FBE
+CCPR2                             00000FBB
+CCPR2H                            00000FBC
+CCPR2L                            00000FBB
+CFGS                              00000006
+CHECK_39                          00000572
+CHECK_FOR_FAULTS                  0000018A
+CHECK_FWD_REV                     000003B6
+CHECK_FWD_REV_KEY                 00000358
+CHECK_OTHER_FAULTS                00000182
+CHECK_PARAMETER_DISPLAY           0000019C
+CHECK_SEQUENCE                    000000CA
+CK                                00000006
+CKE                               00000006
+CKP                               00000004
+CLEAR_OFFSET                      0000047E
+CLKO                              00000006
+CONTINUE_SPEED                    00000106
+COUNTER                           0000000A
+COUNTER1                          0000000B
+COUNTER_SP                        0000000C
+COUNTER_SP1                       0000000D
+COUNT_OPEN_LOOPH                  0000003B
+COUNT_OPEN_LOOPL                  0000003A
+CREN                              00000004
+CSRC                              00000007
+CURRENT_FAULT_INPUT               1
+CURRENT_UH                        00000029
+CURRENT_UL                        0000002A
+CYCLE_COUNTH                      00000033
+CYCLE_COUNTL                      00000034
+CYCLE_COUNT_MAXH                  0x4E
+CYCLE_COUNT_MAXL                  0x20
+D                                 00000005
+DATA_ADDRESS                      00000005
+DC                                00000001
+DC1B0                             00000004
+DC1B1                             00000005
+DC2B0                             00000004
+DC2B1                             00000005
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 34
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+DC_INPUT_VOLTAGE                  d'24'
+DDRA                              TRISA
+DDRB                              TRISB
+DDRC                              TRISC
+DDRD                              TRISD
+DDRE                              TRISE
+DEBOUNCE                          0
+DEBOUNCE_COUNT                    0x8F
+DEBOUNCE_COUNTER                  00000009
+DELAY                             0000058E
+DELAY_COUNT1                      0x01
+DELAY_COUNT2                      0xFF
+DFLTCON                           00000F60
+DISPLAY_DIGITS                    00000552
+DISPLAY_TEMP1                     0000003C
+DISPLAY_TEMP2                     0000003D
+DONE                              00000001
+DOWN                              00000005
+DT0                               00000000
+DT1                               00000001
+DT2                               00000002
+DT3                               00000003
+DT4                               00000004
+DT5                               00000005
+DTA0                              00000000
+DTA1                              00000001
+DTA2                              00000002
+DTA3                              00000003
+DTA4                              00000004
+DTA5                              00000005
+DTAPS0                            00000006
+DTAPS1                            00000007
+DTCON                             00000F6D
+DTPS0                             00000006
+DTPS1                             00000007
+D_A                               00000005
+EEADR                             00000FA9
+EECON1                            00000FA6
+EECON2                            00000FA7
+EEDATA                            00000FA8
+EEIE                              00000004
+EEIF                              00000004
+EEIP                              00000004
+EEPGD                             00000007
+ENCODER_PPR                       d'1024'
+ERROR_PWMH                        00000017
+ERROR_PWML                        00000018
+ERROR_PWM_CONSTANT                00000008
+ESTIMATE_TIMER_CONSTANT           00002711
+FAST                              00000001
+FAULTA_COUNT                      00000035
+FAULTA_PROCESS                    0000023E
+FAULTB_COUNT                      00000036
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 35
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+FERR                              00000002
+FFOVFL                            00000002
+FIFOEN                            00000004
+FIRST_ADC_INIT                    0000042A
+FLAGS                             00000005
+FLAGS1                            00000006
+FLAGS_SRLS                        00000008
+FLAG_FAULT                        1
+FLT1EN                            00000003
+FLT2EN                            00000004
+FLT3EN                            00000005
+FLT4EN                            00000006
+FLTA                              00000001
+FLTAEN                            00000000
+FLTAMOD                           00000001
+FLTAS                             00000002
+FLTB                              00000002
+FLTBEN                            00000004
+FLTBMOD                           00000005
+FLTBS                             00000006
+FLTCK0                            00000000
+FLTCK1                            00000001
+FLTCK2                            00000002
+FLTCON                            00000003
+FLTCONFIG                         00000F6C
+FLTS                              00000002
+FLT_FLAGS                         00000007
+FREE                              00000004
+FSR0                              00000000
+FSR0H                             00000FEA
+FSR0L                             00000FE9
+FSR1                              00000001
+FSR1H                             00000FE2
+FSR1L                             00000FE1
+FSR2                              00000002
+FSR2H                             00000FDA
+FSR2L                             00000FD9
+FWD_REV                           5
+FWD_REV_KEY                       2
+FWD_REV_LED                       4
+GASEL0                            00000000
+GASEL1                            00000001
+GBSEL0                            00000004
+GBSEL1                            00000005
+GCSEL0                            00000002
+GCSEL1                            00000003
+GDSEL0                            00000006
+GDSEL1                            00000007
+GIE                               00000007
+GIEH                              00000007
+GIEL                              00000006
+GO                                00000001
+GO_DONE                           00000001
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 36
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+HALL_A_HIGH                       00000094
+HALL_B_HIGH                       0000009E
+HALL_C_HIGH                       000000B4
+HALL_FLAG                         0
+HALL_SENSOR_COUNT                 00000002
+HIGH_OL_SPEEDH                    0xD8
+HIGH_OL_SPEEDL                    0x78
+HURST_MOTOR                       
+IC1IE                             00000001
+IC1IF                             00000001
+IC1IP                             00000001
+IC2QEIE                           00000002
+IC2QEIF                           00000002
+IC2QEIP                           00000002
+IC3DRIE                           00000003
+IC3DRIF                           00000003
+IC3DRIP                           00000003
+IC_ALOWED                         0
+IDLEN                             00000007
+INDF0                             00000FEF
+INDF1                             00000FE7
+INDF2                             00000FDF
+INITIALIZE_SERIAL_PORT            00000326
+INIT_PERPHERALS                   00000256
+INSTRUCTION_CYCLE                 004C4B40
+INT0                              00000003
+INT0E                             00000004
+INT0F                             00000001
+INT0IE                            00000004
+INT0IF                            00000001
+INT1                              00000004
+INT1E                             00000003
+INT1F                             00000000
+INT1IE                            00000003
+INT1IF                            00000000
+INT1IP                            00000006
+INT1P                             00000006
+INT2                              00000005
+INT2E                             00000004
+INT2F                             00000001
+INT2IE                            00000004
+INT2IF                            00000001
+INT2IP                            00000007
+INT2P                             00000007
+INTCON                            00000FF2
+INTCON2                           00000FF1
+INTCON3                           00000FF0
+INTEDG0                           00000006
+INTEDG1                           00000005
+INTEDG2                           00000004
+IOFS                              00000002
+IPEN                              00000007
+IPR1                              00000F9F
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 37
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+IPR2                              00000FA2
+IPR3                              00000FA5
+IRCF0                             00000004
+IRCF1                             00000005
+IRCF2                             00000006
+IRVST                             00000005
+ISR_HIGH                          00000068
+ISR_LOW                           0000017A
+ITS_FWD_REV                       0000037E
+ITS_REVERSE                       0000011E
+IVRST                             00000005
+KEEP_SAME_PWM                     0000004C
+KEY_CHECK                         00000342
+KEY_DEBOUNCE                      00000382
+KEY_FR                            2
+KEY_PORT                          PORTC
+KEY_PRESSED                       3
+KEY_RS                            1
+LATA                              00000F89
+LATA0                             00000000
+LATA1                             00000001
+LATA2                             00000002
+LATA3                             00000003
+LATA4                             00000004
+LATA6                             00000006
+LATA7                             00000007
+LATB                              00000F8A
+LATB0                             00000000
+LATB1                             00000001
+LATB2                             00000002
+LATB3                             00000003
+LATB4                             00000004
+LATB5                             00000005
+LATB6                             00000006
+LATB7                             00000007
+LATC                              00000F8B
+LATC0                             00000000
+LATC1                             00000001
+LATC2                             00000002
+LATC3                             00000003
+LATC4                             00000004
+LATC5                             00000005
+LATC6                             00000006
+LATC7                             00000007
+LED1                              PORTC,5
+LED2                              PORTC,4
+LED3                              PORTC,3
+LED_BLINK                         0000044C
+LED_PORT                          PORTC
+LESS_39                           00000580
+LOAD_OFFSET                       00000488
+LOAD_SEQUENCE_COUNT               0000048C
+LOAD_SEQUENCE_TABLE               000002DE
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 38
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+LOCK_ROTOR_COUNT                  00000040
+LOWER_SPEED_LEVEL1                000000F2
+LOWER_SPEED_LEVEL2                00000100
+LOW_OL_SPEEDH                     0xB0
+LOW_OL_SPEEDL                     0xF0
+LVDCON                            00000FD2
+LVDEN                             00000004
+LVDIE                             00000002
+LVDIF                             00000002
+LVDIP                             00000002
+LVDL0                             00000000
+LVDL1                             00000001
+LVDL2                             00000002
+LVDL3                             00000003
+MAIN_LOOP                         0000003E
+MAIN_PWM_CONSTANT                 0000004F
+MAXCNTH                           00000F65
+MAXCNTL                           00000F64
+MAX_FLTA_COUNT                    0x20
+MAX_FLTB_COUNT                    .20
+MAX_HEATSINKTEMP                  .20
+MAX_PWM_VALUE                     00000372
+MOTOR_RATED_SPEED                 d'2500'
+MOTOR_VOLTAGE                     d'24'
+N                                 00000004
+NEGATIVE_ERROR                    5
+NEXT_TEST1                        0000049C
+NEXT_TEST2                        000004AE
+NEXT_TEST3                        000004C0
+NEXT_TEST4                        000004D2
+NEXT_TEST5                        000004E4
+NOT_A                             00000005
+NOT_ADDRESS                       00000005
+NOT_BOR                           00000000
+NOT_DONE                          00000001
+NOT_DOWN                          00000005
+NOT_FLTA                          00000001
+NOT_FLTB                          00000002
+NOT_IPEN                          00000007
+NOT_PD                            00000002
+NOT_POR                           00000001
+NOT_RBPU                          00000007
+NOT_RESEN                         00000006
+NOT_RI                            00000004
+NOT_SS                            00000006
+NOT_T1SYNC                        00000002
+NOT_T5SYNC                        00000002
+NOT_TO                            00000003
+NOT_VELM                          00000007
+NOT_W                             00000002
+NOT_WRITE                         00000002
+NOT_YET_THERE                     000001B8
+OCUR                              0
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 39
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+OERR                              00000001
+OPEN_HALL                         00000038
+OPEN_LOOP_ACTIVE                  0000013A
+OPEN_LOOP_PWM                     000004F6
+OPEN_SPEED_STEP2                  3
+OPEN_SPEED_STEP_2                 00000152
+OSC2                              00000006
+OSCCON                            00000FD3
+OSCILLATOR                        d'20000000'
+OSCTUNE                           00000F9B
+OSFIE                             00000007
+OSFIF                             00000007
+OSFIP                             00000007
+OSTS                              00000003
+OSYNC                             00000000
+OTEMP                             2
+OV                                00000003
+OVDCOND                           00000F6B
+OVDCOND_TEMP                      0000003E
+OVDCONS                           00000F6A
+OVOLT                             1
+P                                 00000004
+PARAM_DISPLAY                     2
+PC                                00000FF9
+PCL                               00000FF9
+PCLATH                            00000FFA
+PCLATU                            00000FFB
+PC_COM                            7
+PD                                00000002
+PDC0H                             00000F78
+PDC0L                             00000F79
+PDC1H                             00000F76
+PDC1L                             00000F77
+PDC2H                             00000F74
+PDC2L                             00000F75
+PDC_TEMPH                         0000002B
+PDC_TEMPL                         0000002C
+PDEC0                             00000000
+PDEC1                             00000001
+PEIE                              00000006
+PHASE_SHIFT_READY                 2
+PICDEM_MC_LV                      
+PICK_FROM_TABLE                   00000122
+PIE1                              00000F9D
+PIE2                              00000FA0
+PIE3                              00000FA3
+PIR1                              00000F9E
+PIR2                              00000FA1
+PIR3                              00000FA4
+PLUSW0                            00000FEB
+PLUSW1                            00000FE3
+PLUSW2                            00000FDB
+PMOD0                             00000000
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 40
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+PMOD1                             00000001
+PMOD2                             00000002
+PMOD3                             00000003
+POR                               00000001
+PORTA                             00000F80
+PORTB                             00000F81
+PORTC                             00000F82
+PORTE                             00000F84
+POSCNTH                           00000F67
+POSCNTL                           00000F66
+POSITION0                         b'00000000'
+POSITION01                        b'00000000'
+POSITION1                         b'00010010'
+POSITION11                        b'00010010'
+POSITION2                         b'00001001'
+POSITION21                        b'00001001'
+POSITION3                         b'00011000'
+POSITION31                        b'00011000'
+POSITION4                         b'00100100'
+POSITION41                        b'00100100'
+POSITION5                         b'00000110'
+POSITION51                        b'00000110'
+POSITION6                         b'00100001'
+POSITION61                        b'00100001'
+POSITION7                         b'00000000'
+POSITION71                        b'00000000'
+POSITION_BIT                      3
+POSITION_TABLE_FWD                00000019
+POSITION_TABLE_REV                00000021
+POSTDEC0                          00000FED
+POSTDEC1                          00000FE5
+POSTDEC2                          00000FDD
+POSTINC0                          00000FEE
+POSTINC1                          00000FE6
+POSTINC2                          00000FDE
+POUT0                             00000000
+POUT1                             00000001
+POUT2                             00000002
+POUT3                             00000003
+POUT4                             00000004
+POUT5                             00000005
+POUT6                             00000006
+POUT7                             00000007
+POVD0                             00000000
+POVD1                             00000001
+POVD2                             00000002
+POVD3                             00000003
+POVD4                             00000004
+POVD5                             00000005
+POVD6                             00000006
+POVD7                             00000007
+PR2                               00000FCB
+PR5H                              00000F91
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 41
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+PR5L                              00000F90
+PREINC0                           00000FEC
+PREINC1                           00000FE4
+PREINC2                           00000FDC
+PROCESS_KEY_PRESSED               0000038E
+PROD                              00000FF3
+PRODH                             00000FF4
+PRODL                             00000FF3
+PSA                               00000003
+PTCKPS0                           00000002
+PTCKPS1                           00000003
+PTCON0                            00000F7F
+PTCON1                            00000F7E
+PTDIR                             00000006
+PTEN                              00000007
+PTIE                              00000004
+PTIF                              00000004
+PTIP                              00000004
+PTMOD0                            00000000
+PTMOD1                            00000001
+PTMRH                             00000F7C
+PTMRL                             00000F7D
+PTOPS0                            00000004
+PTOPS1                            00000005
+PTOPS2                            00000006
+PTOPS3                            00000007
+PTPERH                            00000F7A
+PTPERL                            00000F7B
+PTPER_VALUE                       00000137
+PWMCON0                           00000F6F
+PWMCON1                           00000F6E
+PWMEN0                            00000004
+PWMEN1                            00000005
+PWMEN2                            00000006
+PWM_CYCLE_COUNT                   00000037
+PWM_FREQUENCY                     d'16000'
+PWM_INTERRUPT                     0000017C
+PWM_TIMER_PRESCALE                d'01'
+QEICON                            00000FB6
+QEIM0                             00000002
+QEIM1                             00000003
+QEIM2                             00000004
+QEI_X_UPDATE                      d'2'
+R                                 00000002
+RA0                               00000000
+RA1                               00000001
+RA2                               00000002
+RA3                               00000003
+RA4                               00000004
+RA6                               00000006
+RA7                               00000007
+RB0                               00000000
+RB1                               00000001
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 42
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+RB2                               00000002
+RB3                               00000003
+RB4                               00000004
+RB5                               00000005
+RB6                               00000006
+RB7                               00000007
+RBIE                              00000003
+RBIF                              00000000
+RBIP                              00000000
+RBPU                              00000007
+RC0                               00000000
+RC1                               00000001
+RC2                               00000002
+RC3                               00000003
+RC4                               00000004
+RC5                               00000005
+RC6                               00000006
+RC7                               00000007
+RCIDL                             00000006
+RCIE                              00000005
+RCIF                              00000005
+RCIP                              00000005
+RCON                              00000FD0
+RCREG                             00000FAE
+RCSTA                             00000FAB
+RD                                00000000
+RD16                              00000007
+RE3                               00000003
+READ_WRITE                        00000002
+RESEN                             00000006
+RESET_DUTY_CYCLE                  0000020A
+RESH                              00000031
+RESL                              00000032
+RI                                00000004
+RPM_CONSTANT_HALL                 0000CB73
+RPM_CONSTANT_QEI                  00004C48
+RPM_COUNTER                       0000000E
+RUN_MOTOR_AGAIN                   000003F2
+RUN_REVERSE                       00000482
+RUN_STOP                          4
+RUN_STOP_KEY                      0
+RUN_STOP_LED                      5
+RX                                00000007
+RX9                               00000006
+RX9D                              00000000
+R_W                               00000002
+S                                 00000003
+SASEL0                            00000000
+SASEL1                            00000001
+SBSEL0                            00000004
+SBSEL1                            00000005
+SCK                               00000005
+SCKP                              00000004
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 43
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+SCL                               00000005
+SCS0                              00000000
+SCS1                              00000001
+SCSEL0                            00000002
+SCSEL1                            00000003
+SDA                               00000004
+SDI                               00000004
+SDO                               00000007
+SDSEL0                            00000006
+SDSEL1                            00000007
+SENDB                             00000003
+SEND_BYTE_FROM_WREG               00000584
+SEND_DATA_TO_PC                   00000520
+SENSERLESS_ON                     000000E0
+SENSERLESS_T0INT                  00000160
+SET_KEYS                          0000036E
+SET_SEQUENCE_COUNT                0000046C
+SEVOPS0                           00000004
+SEVOPS1                           00000005
+SEVOPS2                           00000006
+SEVOPS3                           00000007
+SEVTCMPH                          00000F70
+SEVTCMPL                          00000F71
+SEVTDIR                           00000003
+SMP                               00000007
+SPBRG                             00000FAF
+SPBRGH                            00000FB0
+SPEED_ERRORH                      00000015
+SPEED_ERRORL                      00000016
+SPEED_FEEDBACKH                   00000013
+SPEED_FEEDBACKL                   00000014
+SPEED_REFH                        00000003
+SPEED_REFL                        00000004
+SPEED_REF_OK                      000001D4
+SPEED_REF_RPMH                    00000011
+SPEED_REF_RPML                    00000012
+SPEN                              00000007
+SREN                              00000005
+SS                                00000006
+SSPADD                            00000FC8
+SSPBUF                            00000FC9
+SSPCON                            00000FC6
+SSPEN                             00000005
+SSPIE                             00000003
+SSPIF                             00000003
+SSPIP                             00000003
+SSPM0                             00000000
+SSPM1                             00000001
+SSPM2                             00000002
+SSPM3                             00000003
+SSPOV                             00000006
+SSPSTAT                           00000FC7
+SSRC0                             00000000
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 44
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+SSRC1                             00000001
+SSRC2                             00000002
+SSRC3                             00000003
+SSRC4                             00000004
+STATUS                            00000FD8
+STKFUL                            00000007
+STKOVF                            00000007
+STKPTR                            00000FFC
+STKPTR0                           00000000
+STKPTR1                           00000001
+STKPTR2                           00000002
+STKPTR3                           00000003
+STKPTR4                           00000004
+STKUNF                            00000006
+STOP_MOTOR                        000003D2
+STOP_MOTOR_NOW                    000003AA
+SWDTEN                            00000000
+SWITCH_SENSORLESS                 1
+SYNC                              00000004
+Start                             00000000
+T016BIT                           00000006
+T0CKI                             00000003
+T0CON                             00000FD5
+T0CS                              00000005
+T0IE                              00000005
+T0IF                              00000002
+T0IP                              00000002
+T0PS0                             00000000
+T0PS1                             00000001
+T0PS2                             00000002
+T0PS3                             00000003
+T0SE                              00000004
+T13CKI                            00000000
+T1CKPS0                           00000004
+T1CKPS1                           00000005
+T1CON                             00000FCD
+T1INSYNC                          00000002
+T1OSCEN                           00000003
+T1OSI                             00000001
+T1OSO                             00000000
+T1RUN                             00000006
+T1SYNC                            00000002
+T2CKPS0                           00000000
+T2CKPS1                           00000001
+T2CON                             00000FCA
+T2OUTPS0                          00000003
+T2OUTPS1                          00000004
+T2OUTPS2                          00000005
+T2OUTPS3                          00000006
+T5CKI                             00000003
+T5CON                             00000FB7
+T5MOD                             00000005
+T5PS0                             00000003
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 45
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+T5PS1                             00000004
+T5SEN                             00000007
+T5SYNC                            00000002
+TABLAT                            00000FF5
+TABLE_OFFSET                      00000039
+TBIE                              00000004
+TBIF                              00000004
+TBIP                              00000004
+TBLPTR                            00000FF6
+TBLPTRH                           00000FF7
+TBLPTRL                           00000FF6
+TBLPTRU                           00000FF8
+TEMP                              00000000
+TEMP1                             00000001
+TIMER1_INT                        00000134
+TIMER5_PRESCALE                   d'1'
+TMR0H                             00000FD7
+TMR0IE                            00000005
+TMR0IF                            00000002
+TMR0IP                            00000002
+TMR0L                             00000FD6
+TMR0ON                            00000007
+TMR1CS                            00000001
+TMR1H                             00000FCF
+TMR1IE                            00000000
+TMR1IF                            00000000
+TMR1IP                            00000000
+TMR1L                             00000FCE
+TMR1ON                            00000000
+TMR2                              00000FCC
+TMR2IE                            00000001
+TMR2IF                            00000001
+TMR2IP                            00000001
+TMR2ON                            00000002
+TMR5CS                            00000001
+TMR5H                             00000F88
+TMR5IE                            00000000
+TMR5IF                            00000000
+TMR5IP                            00000000
+TMR5L                             00000F87
+TMR5ON                            00000000
+TO                                00000003
+TOGGLE_LEDS                       0000041A
+TOS                               00000FFD
+TOSH                              00000FFE
+TOSL                              00000FFD
+TOSU                              00000FFF
+TRISA                             00000F92
+TRISA0                            00000000
+TRISA1                            00000001
+TRISA2                            00000002
+TRISA3                            00000003
+TRISA4                            00000004
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 46
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+TRISA6                            00000006
+TRISA7                            00000007
+TRISB                             00000F93
+TRISB0                            00000000
+TRISB1                            00000001
+TRISB2                            00000002
+TRISB3                            00000003
+TRISB4                            00000004
+TRISB5                            00000005
+TRISB6                            00000006
+TRISB7                            00000007
+TRISC                             00000F94
+TRISC0                            00000000
+TRISC1                            00000001
+TRISC2                            00000002
+TRISC3                            00000003
+TRISC4                            00000004
+TRISC5                            00000005
+TRISC6                            00000006
+TRISC7                            00000007
+TRISC_VALUE                       b'00000111'
+TRMT                              00000001
+TUN0                              00000000
+TUN1                              00000001
+TUN2                              00000002
+TUN3                              00000003
+TUN4                              00000004
+TUN5                              00000005
+TX                                00000006
+TX9                               00000006
+TX9D                              00000000
+TXEN                              00000005
+TXIE                              00000004
+TXIF                              00000004
+TXIP                              00000004
+TXREG                             00000FAD
+TXSTA                             00000FAC
+UA                                00000001
+UDIS                              00000001
+UP                                00000005
+UPDATE_PWM                        000001C2
+UPDATE_SEQUENCE                   00000114
+UP_DOWN                           00000005
+VCFG0                             00000006
+VCFG1                             00000007
+VELM                              00000007
+VELOCITY_PULSE_DECIMATION         d'1'
+VELOCITY_READH                    0000000F
+VELOCITY_READL                    00000010
+VELOCITY_READY                    4
+VELRH                             00000F69
+VELRL                             00000F68
+VREFM                             00000002
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 47
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+VREFP                             00000003
+W                                 00000000
+WAIT_HERE                         0000000E
+WCOL                              00000007
+WDT0                              00000001
+WDT1                              00000002
+WDT2                              00000003
+WDT3                              00000004
+WDT4                              00000005
+WDT5                              00000006
+WDT6                              00000007
+WDTCON                            00000FD1
+WDTW                              00000007
+WR                                00000001
+WREG                              00000FE8
+WREN                              00000002
+WRERR                             00000003
+WUE                               00000001
+Z                                 00000002
+_BOREN_OFF_2L                     000000FD
+_BOREN_ON_2L                      000000FF
+_BORV_20_2L                       000000FF
+_BORV_27_2L                       000000FB
+_BORV_42_2L                       000000F7
+_BORV_45_2L                       000000F3
+_CONFIG1H                         00300001
+_CONFIG2H                         00300003
+_CONFIG2L                         00300002
+_CONFIG3H                         00300005
+_CONFIG3L                         00300004
+_CONFIG4L                         00300006
+_CONFIG5H                         00300009
+_CONFIG5L                         00300008
+_CONFIG6H                         0030000B
+_CONFIG6L                         0030000A
+_CONFIG7H                         0030000D
+_CONFIG7L                         0030000C
+_CP0_OFF_5L                       000000FF
+_CP0_ON_5L                        000000FE
+_CP1_OFF_5L                       000000FF
+_CP1_ON_5L                        000000FD
+_CP2_OFF_5L                       000000FF
+_CP2_ON_5L                        000000FB
+_CP3_OFF_5L                       000000FF
+_CP3_ON_5L                        000000F7
+_CPB_OFF_5H                       000000FF
+_CPB_ON_5H                        000000BF
+_CPD_OFF_5H                       000000FF
+_CPD_ON_5H                        0000007F
+_DEBUG_OFF_4L                     000000FF
+_DEBUG_ON_4L                      0000007F
+_DEVID1                           003FFFFE
+_DEVID2                           003FFFFF
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 48
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_EBTR0_OFF_7L                     000000FF
+_EBTR0_ON_7L                      000000FE
+_EBTR1_OFF_7L                     000000FF
+_EBTR1_ON_7L                      000000FD
+_EBTRB_OFF_7H                     000000FF
+_EBTRB_ON_7H                      000000BF
+_FCMEN_OFF_1H                     000000BF
+_FCMEN_ON_1H                      000000FF
+_HPOL_HIGH_3L                     000000FF
+_HPOL_LOW_3L                      000000EF
+_IDLOC0                           00200000
+_IDLOC1                           00200001
+_IDLOC2                           00200002
+_IDLOC3                           00200003
+_IDLOC4                           00200004
+_IDLOC5                           00200005
+_IDLOC6                           00200006
+_IDLOC7                           00200007
+_IESO_OFF_1H                      0000007F
+_IESO_ON_1H                       000000FF
+_LPOL_HIGH_3L                     000000FF
+_LPOL_LOW_3L                      000000F7
+_LVP_OFF_4L                       000000FB
+_LVP_ON_4L                        000000FF
+_MCLRE_OFF_3H                     0000007F
+_MCLRE_ON_3H                      000000FF
+_OSC_ECIO_1H                      000000F5
+_OSC_EC_1H                        000000F4
+_OSC_HSPLL_1H                     000000F6
+_OSC_HS_1H                        000000F2
+_OSC_IRCIO_1H                     000000F8
+_OSC_IRC_1H                       000000F9
+_OSC_LP_1H                        000000F0
+_OSC_RC1_1H                       000000FB
+_OSC_RC2_1H                       000000F3
+_OSC_RCIO_1H                      000000F7
+_OSC_RC_1H                        000000FF
+_OSC_XT_1H                        000000F1
+_PWMPIN_OFF_3L                    000000FF
+_PWMPIN_ON_3L                     000000FB
+_PWRTEN_OFF_2L                    000000FF
+_PWRTEN_ON_2L                     000000FE
+_STVREN_OFF_4L                    000000FE
+_STVREN_ON_4L                     000000FF
+_T1OSCMX_OFF_3L                   000000DF
+_T1OSCMX_ON_3L                    000000FF
+_WDPS_1024_2H                     000000F5
+_WDPS_128_2H                      000000EF
+_WDPS_16384_2H                    000000FD
+_WDPS_16_2H                       000000E9
+_WDPS_1_2H                        000000E1
+_WDPS_2048_2H                     000000F7
+_WDPS_256_2H                      000000F1
+MPASM  5.37                  SENSRLES_CLN.ASM   11-10-2010  10:58:05         PAGE 49
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_WDPS_2_2H                        000000E3
+_WDPS_32768_2H                    000000FF
+_WDPS_32_2H                       000000EB
+_WDPS_4096_2H                     000000F9
+_WDPS_4_2H                        000000E5
+_WDPS_512_2H                      000000F3
+_WDPS_64_2H                       000000ED
+_WDPS_8192_2H                     000000FB
+_WDPS_8_2H                        000000E7
+_WDTEN_OFF_2H                     000000FE
+_WDTEN_ON_2H                      000000FF
+_WINEN_OFF_2H                     000000FF
+_WINEN_ON_2H                      000000DF
+_WRT0_OFF_6L                      000000FF
+_WRT0_ON_6L                       000000FE
+_WRT1_OFF_6L                      000000FF
+_WRT1_ON_6L                       000000FD
+_WRTB_OFF_6H                      000000FF
+_WRTB_ON_6H                       000000BF
+_WRTC_OFF_6H                      000000FF
+_WRTC_ON_6H                       000000DF
+_WRTD_OFF_6H                      000000FF
+_WRTD_ON_6H                       0000007F
+__18F2431                         00000001
+dec_count                         00000592
+dec_count1                        00000596
+
+Errors   :     0
+Warnings :     0 reported,     0 suppressed
+Messages :     0 reported,     0 suppressed
+
+

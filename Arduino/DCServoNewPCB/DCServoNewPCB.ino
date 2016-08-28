@@ -1,6 +1,6 @@
-
+  
 #define USE_ENCODER_LIBRARY
-
+//#define ENCODER_OPTIMIZE_INTERRUPTS
 
 #include <EEPROM.h>
 #include "EEPROMAnything.h"
@@ -30,7 +30,7 @@ volatile bool servoError = false;
 volatile bool initialised = false; 
 volatile int stepState = 0; 
 volatile int dirState = 0; 
-byte stepMultiplier = 2; // this should probably be adjustable
+byte stepMultiplier = 1; // this should probably be adjustable
 
 long startOffset = 0;
 
@@ -145,6 +145,8 @@ inline void updateServo() {
   if ((!servoError) && (errorValue > errorMargin)) {
     servoError = true;
     tone(buzzerPin, 500, 10000);
+    
+    reset();
 
 
   } 
@@ -221,12 +223,12 @@ void initPID() {
 
 void reset() { 
 
-  servoError = false; 
+
   startOffset = millis(); 
   encoder.write(0); 
   position = targetPositionDouble = motorPower = 0; 
   targetPositionLong = 0;
-
+  servoError = false; 
 }
 
 
@@ -257,8 +259,8 @@ inline void writeEepromData() {
 inline void initBuzzer() { 
   
   pinMode(buzzerPin, OUTPUT); 
-  pinMode(51, OUTPUT); 
-  digitalWrite(51, LOW); 
+  pinMode(buzzerGroundPin, OUTPUT); 
+  digitalWrite(buzzerGroundPin, LOW); 
 
 
 }

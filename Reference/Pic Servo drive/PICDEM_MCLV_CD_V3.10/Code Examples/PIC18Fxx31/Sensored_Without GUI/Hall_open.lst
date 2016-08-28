@@ -1,0 +1,2172 @@
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE  1
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00001 ;-----------------------------------------------------------------
+                      00002 ;This program is used for Motor control training using PIC18Fxx31
+                      00003 ;On BLDC motor control board - Derive the commutation sequence and run the motor!!!!
+                      00004 ;Make sure that jumpers and potentiometers are configured as follows.
+                      00005 ;       J2(2 pin)  - shorted. 
+                      00006 ;       J15(3 pin) - shorted between pin 2 & 3(short link towards the crystal oscillator)
+                      00007 ;       J7, J11 and J13 - shorted between pin 1 & 2(short link towards the ICD2 connector)
+                      00008 ;       J8, J12, J14, J16 and J17 open
+                      00009 ;       Keep Potentiometer REF(R14) completely turned counter clockwise
+                      00010 ;       Keep Potentiometer R60 completely turned clockwise
+                      00011 ;
+                      00012 ;-----------------------------------------------------------------
+                      00013 ;Padmaraja Yedamale:Home Appliance Solutions Group: Microchip Technology Inc
+                      00014 ;V1.0
+                      00015 ;******************************************************************
+                      00016 ;******************************************************************
+                      00017         include         "BLDC_DATA.inc"
+                      00001 ;This file is used for defining the variables and compile time options
+                      00002 ;This file should be included in all .asm/.c files
+                      00003 ;Author : Padmaraja Yedamale
+                      00004 ;Version: V1.1
+                      00005 
+                      00006         include         "P18F2431.inc"
+                      00001         LIST
+                      00002 
+                      00003 ;==========================================================================
+                      00004 ;  MPASM PIC18F2431 processor include
+                      00005 ; 
+                      00006 ;  (c) Copyright 1999-2009 Microchip Technology, All rights reserved
+                      00007 ;==========================================================================
+                      00008 
+                      01340         LIST
+                      00007         
+                      00008 
+                      00009 ;User defined variables
+                      00010 ;---------------------------------------------------------------------------------------
+                      00011 ;Oscillator frequency
+                      00012 #define OSCILLATOR      d'20000000'
+                      00013 ;---------------------------------------------------------------------------------------
+                      00014 ;Enter the PPR of the Optical Encoder on the motor
+                      00015 #define ENCODER_PPR d'1024'
+                      00016 ;---------------------------------------------------------------------------------------
+                      00017 ;Claculating RPM based on the encoder type. The QEI should be in velocity measurement mode
+                      00018 ;Timer5 prescaler
+                      00019 #define TIMER5_PRESCALE d'1'
+                      00020 ;---------------------------------------------------------------------------------------
+                      00021 ;Define the QEI mode of operation. 
+                      00022 ;If the velocity conter is updated only on QEA transition, then enable 2x mode
+                      00023 ;If the velocity conter is updated every QEA and QEB transition, then enable 4x mode
+                      00024 #define QEI_X_UPDATE d'2'
+                      00025 ;#define QEI_X_UPDATE d'4'
+                      00026 ;---------------------------------------------------------------------------------------
+                      00027 ;Define Velocity pulse decimation ratio(Only one line should be selected)
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE  2
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00028 #define VELOCITY_PULSE_DECIMATION d'1' 
+                      00029 ;#define VELOCITY_PULSE_DECIMATION d'4' 
+                      00030 ;#define VELOCITY_PULSE_DECIMATION d'16' 
+                      00031 ;#define VELOCITY_PULSE_DECIMATION d'64' 
+                      00032 ;---------------------------------------------------------------------------------------
+                      00033 ;Calculate the constant to be divided by the Velocity counter value will give RPS
+  004C4B40            00034 INSTRUCTION_CYCLE = (OSCILLATOR)/d'4'
+  00004C48            00035 RPM_CONSTANT_QEI = 8*((INSTRUCTION_CYCLE)/(ENCODER_PPR*QEI_X_UPDATE*VELOCITY_PULSE_DECIMATION*TIMER5_PRE
+                            SCALE))
+                      00036 ;The value is multiplied by 8 to increase the accuracy of division. After devision, the result is devide
+                            d by 8
+  0000CB73            00037 RPM_CONSTANT_HALL = INSTRUCTION_CYCLE/(d'12'*d'8')
+                      00038 ;60 to convert RPM to RPS, 12= # of Hall pulses/revolution
+                      00039 ;---------------------------------------------------------------------------------------
+                      00040 ;PWM frequency definition
+                      00041 #define PWM_TIMER_PRESCALE      d'01'
+                      00042 #define PWM_FREQUENCY   d'16000'
+  00000137            00043 PTPER_VALUE = (OSCILLATOR/(4*PWM_FREQUENCY*PWM_TIMER_PRESCALE))-1
+                      00044 ;---------------------------------------------------------------------------------------
+                      00045 ;Defining the PWM duty cycle constant based on the Motor voltage, DC bus voltage and PWM period register
+                             value
+                      00046 #define MOTOR_VOLTAGE d'24'
+                      00047 #define DC_INPUT_VOLTAGE        d'24'
+                      00048 #define MOTOR_RATED_SPEED d'2500'
+                      00049 
+  0000004D            00050 MAIN_PWM_CONSTANT =(MOTOR_VOLTAGE*PTPER_VALUE*4*d'16')/(DC_INPUT_VOLTAGE*d'256')
+                      00051 ;1.414*256 = 360
+                      00052 ;Multiplication factor = 16
+  00000007            00053 ERROR_PWM_CONSTANT = (MAIN_PWM_CONSTANT * d'256')/MOTOR_RATED_SPEED
+  00000372            00054 MAX_PWM_VALUE = (MOTOR_VOLTAGE*PTPER_VALUE*4*d'100')/(DC_INPUT_VOLTAGE* d'141')
+                      00055 ;---------------------------------------------------------------------------------------
+  00002711            00056 ESTIMATE_TIMER_CONSTANT = ((d'60'* INSTRUCTION_CYCLE)/(MOTOR_RATED_SPEED*d'12'))+1
+                      00057 
+                      00058 ;******************************************************************
+                      00059 #define CYCLE_COUNT_MAXH        0x4E
+                      00060 #define CYCLE_COUNT_MAXL        0x20
+                      00061 #define MAX_FLTA_COUNT  0x80
+                      00062 
+                      00063 ;----------------------------------------------
+                      00064 ;FLAGS bits
+                      00065 #define HALL_FLAG               0
+                      00066 #define FLAG_FAULT              1
+                      00067 #define PARAM_DISPLAY   2
+                      00068 #define POSITION_BIT    3
+                      00069 #define VELOCITY_READY  4
+                      00070 #define NEGATIVE_ERROR  5
+                      00071 #define CALC_PWM                6
+                      00072 #define VALID_HALL              7
+                      00073 
+                      00074 
+                      00075 ;FLAGS1 bits
+                      00076 #define DEBOUNCE        0
+                      00077 #define KEY_RS          1
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE  3
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00078 #define KEY_FR          2
+                      00079 #define KEY_PRESSED 3
+                      00080 #define RUN_STOP 4
+                      00081 #define FWD_REV 5
+                      00082 
+                      00083 ;FLT_FLAGS bits
+                      00084 #define OCUR    0
+                      00085 #define OVOLT   1
+                      00086 #define OTEMP   2
+                      00087 
+                      00088 ;Delay parameters
+                      00089 #define DELAY_COUNT1    0xFF
+                      00090 #define DELAY_COUNT2    0xFF
+                      00091 ;----------------------------------------------------------
+                      00092 ;#define BLDC_MOTOR_CONTROL_BOARD       ;uncomment if older version of the board is used
+                      00093 #define PICDEM_MC_LV                            ;uncomment if the release version of PICDEM LV is used.
+                      00094 ;----------------------------------------------------------
+                      00095 
+                      00096 #ifdef BLDC_MOTOR_CONTROL_BOARD
+                      00097 ;Keys parameters
+                      00098 #define KEY_PORT PORTC
+                      00099 #define RUN_STOP_KEY 4
+                      00100 #define FWD_REV_KEY 5
+                      00101 #define DEBOUNCE_COUNT 0x8F
+                      00102 
+                      00103 ;LED parameters
+                      00104 #define LED_PORT PORTC
+                      00105 #define RUN_STOP_LED 0
+                      00106 #define FWD_REV_LED 2
+                      00107 
+                      00108 #define LED1    PORTC,0
+                      00109 #define LED2    PORTC,2
+                      00110 #define LED3    PORTC,3
+                      00111 
+                      00112 ;PORTC<0> : LED1, Output
+                      00113 ;PORTC<1> : FLTA, Input
+                      00114 ;PORTC<2> : LED2, Output
+                      00115 ;PORTC<3> : LED3, Output
+                      00116 ;PORTC<4> : Switch S3, Input
+                      00117 ;PORTC<5> : Switch S2, Input
+                      00118 ;PORTC<6> : TX, Output
+                      00119 ;PORTC<7> : RX, Input
+                      00120 #define TRISC_VALUE b'00110010'
+                      00121 #endif
+                      00122 
+                      00123 
+                      00124 
+                      00125 #ifdef PICDEM_MC_LV
+                      00126 ;Keys parameters
+                      00127 #define KEY_PORT PORTC
+                      00128 #define RUN_STOP_KEY 0
+                      00129 #define FWD_REV_KEY 2
+                      00130 #define DEBOUNCE_COUNT 0x8F
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE  4
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00131 
+                      00132 ;LED parameters
+                      00133 #define LED_PORT PORTC
+                      00134 #define RUN_STOP_LED 5
+                      00135 #define FWD_REV_LED 4
+                      00136 
+                      00137 #define LED1    PORTC,5
+                      00138 #define LED2    PORTC,4
+                      00139 #define LED3    PORTC,3
+                      00140 
+                      00141 ;PORTC<0> : Switch S3, Input 
+                      00142 ;PORTC<1> : FLTA, Input
+                      00143 ;PORTC<2> : Switch S2, Input
+                      00144 ;PORTC<3> : LED3, Output
+                      00145 ;PORTC<4> : LED2, Output
+                      00146 ;PORTC<5> : LED1, Output
+                      00147 ;PORTC<6> : TX, Output
+                      00148 ;PORTC<7> : RX, Input
+                      00149 
+                      00150 #define TRISC_VALUE b'00000111'
+                      00151 
+                      00152 #endif
+                      00153 
+                      00154 
+                      00155 ;ADC initialization values
+                      00156 
+                      00157 #define ADCON0_VALUE b'00010001'        ;Multi channel, Sequenctial mode conversion of Group A&B
+                      00158 #define ADCON1_VALUE b'00010000'        ;FIFO enabled, Vref+=AVdd, Vref-= AVss
+                      00159 #define ADCON2_VALUE b'00110010'        ;Left justified result, 64Tad, Fosc/32 clock
+                      00160 #define ADCON3_VALUE b'01000000'        ;Interrupt every 2nd and 4th written to FIFO, no ext trigger 
+                      00161 #define ADCHS_VALUE b'00000000'         ;AN0 and AN1 selected from group A&B
+                      00162 #define ANSEL0_VALUE b'00000011'        ;;AN0 and AN1 selected as analog inputs
+                      00163 #define ANSEL1_VALUE b'00000000'        
+                      00164 
+                      00165 
+                      00166 
+                      00167 
+                      00168 ;******************************************************************
+                      00169 
+                      00170 ;Configurartin bits
+                      00171 
+                      00172         LIST p=18f2431,f=INHX32
+                      00173 
+                      00174 ;Old way of defining the configuration registers
+                      00175 ;       __CONFIG _CONFIG1H, 0x06 ;_OSC_HS_1H &_FCMEN_OFF_1H&_IESO_OFF_1H
+                      00176 ;       __CONFIG _CONFIG2L, 0x0E ;_PWRTEN_ON_2L & _BOREN_ON_2L & _BORV_20_2L  
+                      00177 ;       __CONFIG _CONFIG2H, 0x1E ;_WDTEN_OFF_2H
+                      00178 ;       __CONFIG _CONFIG3L, 0x3C ;0x24 ;_PWMPIN_OFF_3L & _LPOL_LOW_3L & _HPOL_LOW_3L & _GPTREN_ON_3L
+                      00179 ;       __CONFIG _CONFIG3H, 0x9D ;_FLTAMX_RC1_3H & _PWM4MX_RB5_3H
+                      00180 ;       __CONFIG _CONFIG4L, 0x80 
+                      00181 ;       __CONFIG _CONFIG5L, 0x0F 
+                      00182 ;       __CONFIG _CONFIG5H, 0xC0  
+                      00183 ;       __CONFIG _CONFIG6L, 0x0F 
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE  5
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00184 ;       __CONFIG _CONFIG6H, 0xE0 
+                      00185 ;       __CONFIG _CONFIG7L, 0x0F 
+                      00186 ;       __CONFIG _CONFIG7H, 0x40    
+                      00187 
+                      00188 ;New way of defining the configuration registers
+                      00189         CONFIG OSC=HSPLL, FCMEN=OFF, IESO=OFF
+                      00190         CONFIG PWRTEN=ON, BOREN=ON, BORV=27
+                      00191         CONFIG WDTEN=OFF, WINEN=OFF
+                      00192         CONFIG T1OSCMX=OFF, HPOL=HIGH, LPOL=HIGH, PWMPIN=OFF
+                      00193         CONFIG MCLRE=ON
+                      00194         CONFIG STVREN=OFF, LVP=OFF
+                      00195         CONFIG CP0=OFF, CP1=OFF, CP2=OFF, CP3=OFF
+                      00196         CONFIG CPB=OFF, CPD=OFF
+                      00197         CONFIG WRT0=OFF, WRT1=OFF
+                      00198         CONFIG WRTB=OFF, WRTC=OFF, WRTD=OFF
+                      00199         CONFIG EBTR0=OFF, EBTR1=OFF 
+                      00200         CONFIG EBTRB=OFF
+                      00201 
+                      00202 
+                      00203 
+                      00204 ;--------------------------------------------------
+                      00205 ;Write the commutation sequence from the winding energizing table given below
+                      00206 ;-------------------------------------------------------------
+                      00207 ; |     Hall A | Hall B | Hall C | Phase A | Phase B | Phase C |
+                      00208 ;-------------------------------------------------------------
+                      00209 ; |        0   |        0       |       0        |      ---        |    ---      |      ---        |
+                      00210 ; |        1   |        0       |       0        |      DC+        |    ---      |      DC-        |
+                      00211 ; |        0   |        1       |       0        |      ---        |    DC-      |      DC+    |
+                      00212 ; |        1   |        1       |       0        |      DC+        |    DC-      |      ---    |
+                      00213 ; |        0   |        0       |       1        |      DC-        |    DC+      |      ---    |
+                      00214 ; |        1   |        0       |       1        |      ---        |    DC+      |      DC-    |
+                      00215 ; |        0   |        1       |       1        |      DC-        |    ---      |      DC+    |
+                      00216 ; |        1   |        1       |       1        |      ---        |    ---      |      ---    |
+                      00217 ;-------------------------------------------------------------
+                      00218 
+                      00219 ;Define the following bytes based on the table above(corresponding to the Hall inputs)
+                      00220 ;These will be loaded to POSITION_TABLE_FWD<0> to POSITION_TABLE_FWD<7> and 
+                      00221 ;POSITION_TABLE_REV<0> to POSITION_TABLE_REV<7> upon initialization 
+                      00222 ;Be sure not to enable more than two PWMs for a position
+                      00223 ;and the PWMs enabled should not control the MOSFETs on the same half bridge. 
+                      00224 ;Refer to the circuit schematic to findout which PWM is controlling which MOSFET.  
+                      00225 ;Note: 
+                      00226 ;For the given HURST motor, the reverse energizing sequence can be obtained from the forward sequence ju
+                            st by complementing the Hall states  
+                      00227 ;Some motors may have different sequence for forward and reverse rotation. That is the reason for giving
+                             two different tables for the sequence
+                      00228 ;----------------------------------------------------
+                      00229 #define POSITION0       b'00000000'     ;This will be loaded to OVDCOND register when HallA=0,HallB=0,Ha
+                            llC=0
+                      00230 #define POSITION1       b'00010010'     ;This will be loaded to OVDCOND register when HallA=1,HallB=0,Ha
+                            llC=0
+                      00231 #define POSITION2       b'00100100'     ;This will be loaded to OVDCOND register when HallA=0,HallB=1,Ha
+                            llC=0
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE  6
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00232 #define POSITION3       b'00000110' ;This will be loaded to OVDCOND register when HallA=1,HallB=1,HallC=
+                            0
+                      00233 #define POSITION4       b'00001001' ;This will be loaded to OVDCOND register when HallA=0,HallB=0,HallC=
+                            1
+                      00234 #define POSITION5       b'00011000' ;This will be loaded to OVDCOND register when HallA=1,HallB=0,HallC=
+                            1
+                      00235 #define POSITION6       b'00100001' ;This will be loaded to OVDCOND register when HallA=0,HallB=1,HallC=
+                            1
+                      00236 #define POSITION7       b'00000000' ;This will be loaded to OVDCOND register when HallA=1,HallB=1,HallC=
+                            1
+                      00237 ;****************************************************************
+                      00238 ;****************************************************************
+                      00239 ;****************************************************************
+                      00240 ;****************************************************************
+                      00241 ;----------------------------------------------------
+                      00242 ;Hurst Motor power connection(White square connector with 4 wires)
+                      00243 ;Red : connect to M1 on J9 on the board 
+                      00244 ;Black : connect to M2 on J9 on the board 
+                      00245 ;White : connect to M3 on J9 on the board 
+                      00246 ;Green : connect to G on J9 on the board 
+                      00247 ;----------------------------------------------------
+                      00248 ;HALL A connected to IC1 on pin RA2
+                      00249 ;HALL B connected to IC2 on pin RA3
+                      00250 ;HALL C connected to IC3 on pin RA4
+                      00251 ;Motor Hall sensor connection(Black inline connector with 5 wires)
+                      00252 ;Red : Connect to +5V on J9 on the board 
+                      00253 ;Black : connect to COM(Earth symbol) on J9 on the board 
+                      00254 ;White : connect to HA on J9 on the board 
+                      00255 ;Brown : connect to HB on J9 on the board 
+                      00256 ;Green : connect to HC on J9 on the board 
+                      00257 
+                      00258 ;----------------------------------------------------------
+                      00259 #ifndef ANSEL1
+                      00260 ANSEL1           EQU  H'0FB9'
+                      00261 #endif
+                      00262 
+                      00263 ;--------------------------------------------------
+                      00018 ;--------------------------------------------------
+                      00019 ;******************************************************************
+  0000                00020         extern  INITIALIZE_SERIAL_PORT
+  0000                00021         extern  WELCOME_MESSAGE
+  0000                00022         extern  DISPLAY_SPEED_REF
+  0000                00023         extern  DISPLAY_CURRENT_Iu
+  0000                00024         extern  DISPLAY_PARAMETERS
+  0000                00025         extern  DISPALY_CAP1_H
+  0000                00026         extern  DISPALY_CAP1_L
+  0000                00027         extern  DISPALY_CAP2_H
+  0000                00028         extern  DISPALY_CAP2_L
+  0000                00029         extern  DISPALY_CAP3_H
+  0000                00030         extern  DISPALY_CAP3_L
+                      00031         
+                      00032 ;******************************************************************
+                      00033 BLDC_MOTOR_CONTROL      UDATA_ACS
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE  7
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00034 
+000000                00035 SPEED_REFH                      res     1
+000001                00036 SPEED_REFL                      res     1
+000002                00037 FLAGS                           res     1
+000003                00038 FLAGS1                          res     1
+000004                00039 DEBOUNCE_COUNTER        res     1
+000005                00040 COUNTER                         res     1
+000006                00041 COUNTER1                        res     1
+                      00042 
+000007                00043 POSITION_TABLE_FWD      res     8
+00000F                00044 POSITION_TABLE_REV      res     8
+                      00045 
+000017                00046 MOTOR_CURRENTH          res     1
+000018                00047 MOTOR_CURRENTL          res     1
+                      00048 
+000019                00049 PDC_TEMPH                       res     1
+00001A                00050 PDC_TEMPL                       res     1
+                      00051 
+                      00052 
+00001B                00053 CYCLE_COUNTH            res     1
+00001C                00054 CYCLE_COUNTL            res     1
+                      00055 
+00001D                00056 FAULTA_COUNT            res     1
+00001E                00057 PWM_CYCLE_COUNT         res     1
+00001F                00058 FLT_FLAGS                       res     1
+000020                00059 TIMER0_COUNT            res     1
+000021                00060 DISPLAY_COUNT           res     1
+                      00061 
+000022                00062 CAP1H           res     1
+000023                00063 CAP1L           res     1
+000024                00064 CAP2H           res     1
+000025                00065 CAP2L           res     1
+000026                00066 CAP3H           res     1
+000027                00067 CAP3L           res     1
+                      00068 
+                      00069 
+                      00070 
+                      00071 ;----------------------------------------------------------------
+                      00072 STARTUP code 0x00
+000000 EF?? F???      00073         goto    Start           ;Reset Vector address 
+                      00074         
+                      00075         CODE    0x08
+000008 EF?? F???      00076         goto    ISR_HIGH        ;Higher priority ISR at 0x0008
+                      00077 
+                      00078 PRG_LOW CODE    0x018
+000018 EF?? F???      00079         goto    ISR_LOW         ;Lower priority ISR at 0x0018
+                      00080         
+                      00081 ;****************************************************************
+                      00082 PROG    code
+                      00083 
+                      00084 ;******************************************************************
+                      00085 ;****************************************************************
+                      00086 ;****************************************************************
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE  8
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00087 ;****************************************************************
+                      00088 ;****************************************************************
+                      00089 ;****************************************************************
+000000                00090 Start
+                      00091 ;****************************************************************
+000000 6A??           00092         clrf    SPEED_REFH              
+000002 6A??           00093         clrf    FLAGS
+000004 6A??           00094         clrf    FLAGS1
+                      00095 ;-----------------------------------------------------------------
+000006 0E07           00096         movlw   TRISC_VALUE             ; Initialize PortC
+000008 6E94           00097         movwf   TRISC
+                      00098 ;-----------------------------------------------------------------
+00000A EC?? F???      00099         call    INITIALIZE_ADC  ;Initialize ADC 
+00000E 8CF2           00100         bsf             INTCON,PEIE             ;Port interrupts enable
+000010 8EF2           00101         bsf             INTCON,GIE              ;Global interrupt enable
+                      00102 
+000012                00103 WAIT_HERE                                       ;Control waits here until a key is pressed      
+000012 EC?? F???      00104         call    LED_ON_OFF              ;Potentiometer level is deispalyed on LED1,2 and 3
+000016 EC?? F???      00105         call    KEY_CHECK
+00001A 82C2           00106         bsf             ADCON0,GO
+00001C A6??           00107         btfss   FLAGS1,KEY_PRESSED
+00001E D???           00108         bra             WAIT_HERE
+                      00109 ;---------------------
+000020 EC?? F???      00110         call    INITIALIZE_INPUT_CAPTURE        ;Input cature module initialized here
+000024 EC?? F???      00111         call    INITIALIZE_PCPWM                        ;PCPWM module initialized here          
+000028 EC?? F???      00112         call    LOAD_SEQUENCE_TABLE                     ;Energizing Sequence table is initialized
+00002C EC?? F???      00113         call    INITIALIZE_SERIAL_PORT          ;Serial port is initialized to display few key parameter
+                            s on Hyper terminal
+000030 EC?? F???      00114         call    WELCOME_MESSAGE                         ;Send a test message to PC
+                      00115 
+                      00116 ;*******************************************************************************************
+                      00117 ;Control keeps revolving in the main loop
+                      00118 ;Tasks done in MAIN_LOOP
+                      00119 ;PWM duty cycle updated after every ADC conversion
+                      00120 ;Key activity is checked
+                      00121 ;If a key is pressed action is taken based on the key pressed
+                      00122 ;----------------------------------------------------------------
+000034                00123 MAIN_LOOP
+000034 AC??           00124         btfss   FLAGS,CALC_PWM                  ;Is ADc result ready?
+000036 D???           00125         bra             KEEP_SAME_PWM   
+000038 EC?? F???      00126         call    UPDATE_PWM                              ;Update PWM duty cycle
+00003C 9C??           00127         bcf             FLAGS,CALC_PWM
+00003E EC?? F???      00128         call    DISPLAY_ROUTINE                 ;Dump parameters on to Hyper terminal
+000042                00129 KEEP_SAME_PWM   
+000042 EC?? F???      00130         call    KEY_CHECK                               ;Check for Key activity, take care of debounce
+000046 EC?? F???      00131         call    PROCESS_KEY_PRESSED             ;If a key is pressed, take action accordingly
+                      00132 
+00004A A2C2           00133         btfss   ADCON0,GO       
+00004C 82C2           00134         bsf             ADCON0,GO                               ;Set GO bit for ADC conversion start    
+                      00135 
+00004E EF?? F???      00136         goto    MAIN_LOOP
+                      00137 
+                      00138 ;*******************************************************************************************
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE  9
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00139 ;High priority Intterrupt service routines
+                      00140 ;ADC, Input captures(hall sensors) and PWM interrupts are serviced here 
+                      00141 ;--------------------------------------------------------------
+000052                00142 ISR_HIGH
+000052 B2A4           00143         btfsc   PIR3,IC1IF                      ;IC1/IC2 or IC3 interrupt??
+000054 D???           00144         bra             HALL_A_HIGH
+000056 B4A4           00145         btfsc   PIR3,IC2QEIF
+000058 D???           00146         bra             HALL_B_HIGH
+00005A B6A4           00147         btfsc   PIR3,IC3DRIF
+00005C D???           00148         bra             HALL_C_HIGH
+                      00149 
+00005E BC9E           00150         btfsc   PIR1,ADIF                       ;ADC conversion ready?
+000060 D???           00151         bra             ADC_INT 
+                      00152 
+000062 B8A4           00153         btfsc   PIR3,PTIF                       ;PWM interrupt?
+000064 D???           00154         bra             PWM_INTERRUPT
+                      00155 
+000066 0011           00156         RETFIE  FAST
+                      00157 ;******************************************************************
+000068                00158 ADC_INT ;ADC interrupt
+                      00159         
+000068 CFC3 F???      00160         movff   ADRESL,MOTOR_CURRENTL   ;Sample A = Iu
+00006C CFC4 F???      00161         movff   ADRESH,MOTOR_CURRENTH
+                      00162 
+000070 CFC3 F???      00163         movff   ADRESL,SPEED_REFL               ;Sample B = speed ref
+000074 CFC4 F???      00164         movff   ADRESH,SPEED_REFH       
+                      00165         
+000078 9C9E           00166         bcf             PIR1,ADIF                               ;ADIF flag is cleared for next interrupt
+                      00167         
+00007A 8C??           00168         bsf             FLAGS,CALC_PWM                  ;Set flag to indicate ADC conversion complete   
+                      00169 
+00007C 0011           00170         RETFIE  FAST            
+                      00171 ;******************************************************************
+                      00172 ;******************************************************************
+                      00173 ;Hall sensor interrupts on IC1,IC2 and IC3
+                      00174 ;******************************************************************
+00007E                00175 HALL_A_HIGH
+00007E EC?? F???      00176         call    UPDATE_SEQUENCE                 ;Update the winding energizing sequence based on IC stat
+                            e
+000082 9A82           00177         bcf             LED1                                    ;Display the Hall sensor 1 status on LED
+                            1
+000084 B480           00178         btfsc   PORTA,2
+000086 8A82           00179         bsf             LED1    
+000088 92A4           00180         bcf             PIR3,IC1IF
+                      00181 
+00008A CF68 F???      00182         movff   CAP1BUFL,CAP1L
+00008E CF69 F???      00183         movff   CAP1BUFH,CAP1H
+                      00184 
+000092 0011           00185         RETFIE  FAST
+                      00186 
+000094                00187 HALL_B_HIGH
+000094 EC?? F???      00188         call    UPDATE_SEQUENCE                 ;Update the winding energizing sequence based on IC stat
+                            e
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 10
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000098 9882           00189         bcf             LED2                                    ;Display the Hall sensor 2 status on LED
+                            2
+00009A B680           00190         btfsc   PORTA,3
+00009C 8882           00191         bsf             LED2    
+00009E 94A4           00192         bcf             PIR3,IC2QEIF
+                      00193 
+0000A0 CF66 F???      00194         movff   CAP2BUFL,CAP2L
+0000A4 CF67 F???      00195         movff   CAP2BUFH,CAP2H
+                      00196 
+0000A8 0011           00197         RETFIE  FAST
+                      00198 
+                      00199 
+0000AA                00200 HALL_C_HIGH
+0000AA EC?? F???      00201         call    UPDATE_SEQUENCE                 ;Update the winding energizing sequence based on IC stat
+                            e
+0000AE 9682           00202         bcf             LED3                                    ;Display the Hall sensor 3 status on LED
+                            3
+0000B0 B880           00203         btfsc   PORTA,4
+0000B2 8682           00204         bsf             LED3    
+0000B4 96A4           00205         bcf             PIR3,IC3DRIF    
+                      00206 
+0000B6 CF64 F???      00207         movff   CAP3BUFL,CAP3L
+0000BA CF65 F???      00208         movff   CAP3BUFH,CAP3H
+                      00209 
+0000BE 0011           00210         RETFIE  FAST
+                      00211 ;******************************************************************
+                      00212 ;Lower ISR  not used in this code example
+0000C0                00213 ISR_LOW
+                      00214 
+0000C0 0011           00215         RETFIE  FAST            
+                      00216         
+                      00217 ;******************************************************************
+                      00218 ;Update the winding energizing sequence
+0000C2                00219 UPDATE_SEQUENCE
+0000C2 AA??           00220         btfss   FLAGS1,FWD_REV                  ;Check the direction command
+0000C4 D???           00221         bra             ITS_REVERSE                             
+0000C6 EE?? F0??      00222         lfsr    0,POSITION_TABLE_FWD    ;If it is forward, point FSR0 to the begining of Forward table 
+0000CA D???           00223         bra             PICK_FROM_TABLE
+0000CC                00224 ITS_REVERSE
+0000CC EE?? F0??      00225         lfsr    0,POSITION_TABLE_REV    ;If it is reverse, point FSR0 to the begining of Reverse table 
+                      00226 
+0000D0                00227 PICK_FROM_TABLE
+0000D0 EC?? F???      00228         call    PICK_ENERGIZING_SEQUENCE        ;Pick up the energizing value according to IC1/IC2/IC3 o
+                            ffset
+                      00229 
+0000D4 0012           00230         return
+                      00231 ;****************************************************************
+                      00232 ;This routine picks up the correct value from the table according to he direction and offset
+                      00233 ;----------------------------------------------------
+0000D6                00234 PICK_ENERGIZING_SEQUENCE
+0000D6 5080           00235         movf    PORTA,W                                 ;Load porta value to Wreg
+0000D8 0B1C           00236         andlw   0x1C                                    ;Mask other bits, IC1/IC2/IC3 are on PORTA pin 2
+                            ,3,4
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 11
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0000DA 40E8           00237         rrncf   WREG,W                                  
+0000DC 40E8           00238         rrncf   WREG,W                                  ;Rotate twice to move the bits to LSB
+0000DE 50EB           00239         movf    PLUSW0,W                                ;Pick the value from table with the offset
+0000E0 6E6B           00240         movwf   OVDCOND                                 ;Load it to Override register. 
+0000E2 0012           00241         return                                                  ;Override register ecides which PWM to a
+                            llow and which to block according to the energizing sequence.
+                      00242 
+                      00243 ;******************************************************************
+                      00244 ;This routine updates the PWM duty cycle according to the input speed referance, Motor voltage and DC bu
+                            s voltage
+                      00245 ;PWM duty cycle = [(MotorVoltage/DCbus voltage)*(PTPER*4)]*[SpeedRef/255] *16
+                      00246 ;16 is the multiplication factor and 255 is max value of speed referance(8 MSBs are taken from ADC conve
+                            rsion)
+                      00247 
+0000E4                00248 UPDATE_PWM
+0000E4 0E20           00249         movlw   0x20                                    ;Lower side cut off for the speed referance
+0000E6 64??           00250         cpfsgt  SPEED_REFH      
+0000E8 D???           00251         bra             RESET_DUTY_CYCLE
+                      00252         
+0000EA 0E40           00253         movlw   0x40                                    ;Additional offset given to the speed ref
+0000EC 26??           00254         addwf   SPEED_REFH,F
+0000EE A0D8           00255         btfss   STATUS,C
+0000F0 D???           00256         bra             SPEED_REF_OK
+0000F2 0EFF           00257         movlw   0xFF                                    ;Limit speed ref to 8 bits
+0000F4 6E??           00258         movwf   SPEED_REFH
+0000F6                00259 SPEED_REF_OK    
+0000F6 0EFD           00260         movlw   0xFD
+0000F8 60??           00261         cpfslt  SPEED_REFH      
+0000FA 6E??           00262         movwf   SPEED_REFH
+                      00263 
+                      00264 ;PWM = [(MotorVoltage/DCbus voltage)*(PTPER*4)]*[SpeedRef/255] *16
+                      00265 ;16 is the multiplication factor
+0000FC 50??           00266         movf    SPEED_REFH,W    
+0000FE 0D4D           00267         mullw   (MAIN_PWM_CONSTANT)             ;MAIN_PWM_CONSTANT=(MOTOR_VOLTAGE*PTPER_VALUE*4*d'16')/(
+                            DC_INPUT_VOLTAGE*d'256')
+000100 38F3           00268         swapf   PRODL,W                                 ;
+000102 0B0F           00269         andlw   0x0F
+000104 6E??           00270         movwf   PDC_TEMPL
+000106 38F4           00271         swapf   PRODH,W
+000108 0BF0           00272         andlw   0xF0
+00010A 12??           00273         iorwf   PDC_TEMPL,F
+00010C 38F4           00274         swapf   PRODH,W
+00010E 0B0F           00275         andlw   0x0F
+000110 6E??           00276         movwf   PDC_TEMPH                               ;Take 12 MS bits from the product and load to du
+                            ty cycle registers
+                      00277  
+000112 826E           00278         bsf             PWMCON1,UDIS                    ;Disable the PWM buffer update
+                      00279 
+000114 50??           00280         movf    PDC_TEMPH,W                             ;Same duty cycle values are loaded to all PDC re
+                            gisters
+000116 6E78           00281         movwf   PDC0H
+000118 6E76           00282         movwf   PDC1H
+00011A 6E74           00283         movwf   PDC2H   
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 12
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00284 ;       movwf   PDC3H   
+                      00285 
+00011C 50??           00286         movf    PDC_TEMPL,W
+00011E 6E79           00287         movwf   PDC0L   
+000120 6E77           00288         movwf   PDC1L
+000122 6E75           00289         movwf   PDC2L
+                      00290 ;       movwf   PDC3L
+                      00291 
+000124 926E           00292         bcf             PWMCON1,UDIS                    ;Enable the PWM buffer update
+000126 0012           00293         RETURN
+                      00294 ;---------------------------------------------
+                      00295 ;Output 0% duty cycle at starting and while reversing the direction
+                      00296 
+000128                00297 RESET_DUTY_CYCLE
+000128 6A78           00298         clrf    PDC0H
+00012A 6A76           00299         clrf    PDC1H
+00012C 6A74           00300         clrf    PDC2H
+                      00301 ;       clrf    PDC3H   
+00012E 6A79           00302         clrf    PDC0L
+000130 6A77           00303         clrf    PDC1L
+000132 6A75           00304         clrf    PDC2L
+                      00305 ;       clrf    PDC3L
+                      00306 
+000134 EC?? F???      00307         call    UPDATE_SEQUENCE         ;Update the energizing sequence at startup
+000138 0012           00308         return
+                      00309 ;******************************************************************
+                      00310 ;This routine checks for the Faults. Also sets the flag for parameter display
+                      00311 ;Over current (Fault A) is initialized in cycle-by-cycle mode. 
+                      00312 ;If these faults occur very frequently, the mode is changed to catestriphic mode and PWMs are shut down
+                      00313 ;The occurence of these faults are checked every PWM interrupt with a limit(MAX_FLTA_COUNT) and if it ex
+                            eeds the limit
+                      00314 ;in 256 PWM cycles, the mode is changed to catestrophic.
+                      00315 ;LED1 is blinked at fixed rate, if the Overcurrent fault is detected in catestrophic mode 
+                      00316 
+00013A                00317 PWM_INTERRUPT
+00013A 3E??           00318         incfsz  PWM_CYCLE_COUNT,F
+00013C D???           00319         bra             CHECK_FOR_FAULTS
+00013E 6A??           00320         clrf    FAULTA_COUNT
+000140 D???           00321         bra             CHECK_PARAMETER_DISPLAY 
+                      00322         
+000142                00323 CHECK_FOR_FAULTS
+000142 A46C           00324         btfss   FLTCONFIG,FLTAS
+000144 D???           00325         bra             CHECK_PARAMETER_DISPLAY 
+000146 2A??           00326         incf    FAULTA_COUNT,F
+000148 0E80           00327         movlw   MAX_FLTA_COUNT
+00014A 64??           00328         cpfsgt  FAULTA_COUNT
+00014C D???           00329         bra             CHECK_PARAMETER_DISPLAY 
+00014E 926C           00330         bcf             FLTCONFIG,FLTAMOD
+000150 80??           00331         bsf             FLT_FLAGS,OCUR
+000152                00332 CHECK_PARAMETER_DISPLAY
+000152 0E4E           00333         movlw   CYCLE_COUNT_MAXH
+000154 62??           00334         cpfseq  CYCLE_COUNTH
+000156 D???           00335         bra             NOT_YET_THERE
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 13
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000158 0E20           00336         movlw   CYCLE_COUNT_MAXL
+00015A 64??           00337         cpfsgt  CYCLE_COUNTL
+00015C D???           00338         bra             NOT_YET_THERE
+                      00339 ;       bsf             FLAGS,PARAM_DISPLAY
+00015E 6A??           00340         clrf    CYCLE_COUNTH
+000160 6A??           00341         clrf    CYCLE_COUNTL
+000162 B0??           00342         btfsc   FLT_FLAGS,OCUR
+000164 7A82           00343         btg             LED1
+000166 98A4           00344         bcf             PIR3,PTIF
+000168 0011           00345         retfie  FAST
+00016A                00346 NOT_YET_THERE
+00016A 3E??           00347         incfsz  CYCLE_COUNTL,F
+00016C 0011           00348         retfie  FAST
+00016E 2A??           00349         incf    CYCLE_COUNTH,F
+000170 98A4           00350         bcf             PIR3,PTIF
+000172 0011           00351         retfie  FAST
+                      00352 
+                      00353 ;******************************************************************
+                      00354 
+                      00355 ;******************************************************************
+                      00356 ;******************************************************************
+                      00357 ;ADC is initialized here
+000174                00358 INITIALIZE_ADC
+000174 0E11           00359         movlw   ADCON0_VALUE                    ;ADC 
+000176 6EC2           00360         movwf   ADCON0
+000178 0E10           00361         movlw   ADCON1_VALUE
+00017A 6EC1           00362         movwf   ADCON1
+00017C 0E32           00363         movlw   ADCON2_VALUE
+00017E 6EC0           00364         movwf   ADCON2
+000180 0E40           00365         movlw   ADCON3_VALUE
+000182 6E9A           00366         movwf   ADCON3
+000184 0E00           00367         movlw   ADCHS_VALUE
+000186 6E99           00368         movwf   ADCHS
+000188 0E03           00369         movlw   ANSEL0_VALUE
+00018A 6EB8           00370         movwf   ANSEL0
+00018C 0E00           00371         movlw   ANSEL1_VALUE
+00018E 6EB9           00372         movwf   ANSEL1
+000190 82C2           00373         bsf             ADCON0,GO
+000192 8C9D           00374         bsf     PIE1,ADIE       ;AD Converter Interrupt enable
+000194 0012           00375         RETURN
+                      00376         
+                      00377 
+                      00378 ;******************************************************************
+                      00379 ;******************************************************************
+                      00380 ;Input capture initialization
+000196                00381 INITIALIZE_INPUT_CAPTURE
+                      00382 ;init Hall @ IC1/IC2/IC3
+000196 8492           00383         bsf             TRISA,2                         ;TrisA 2,3,4 configured as inputs
+000198 8692           00384         bsf             TRISA,3
+00019A 8892           00385         bsf             TRISA,4
+00019C 0E19           00386         movlw   b'00011001'
+00019E 6EB7           00387         movwf   T5CON
+0001A0 0E48           00388         movlw   b'01001000'     ;Cap1/2/3-capture every input state change
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 14
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0001A2 6E63           00389         movwf   CAP1CON
+0001A4 0E48           00390         movlw   b'01001000'
+0001A6 6E62           00391         movwf   CAP2CON
+0001A8 0E48           00392         movlw   b'01001000'
+0001AA 6E61           00393         movwf   CAP3CON
+0001AC 0E00           00394         movlw   b'00000000'
+0001AE 6E60           00395         movwf   DFLTCON
+0001B0 0E00           00396         movlw   b'00000000'     ;Disable QEI
+0001B2 6EB6           00397         movwf   QEICON  
+                      00398 
+                      00399 ;init interrupts
+0001B4 82A3           00400         bsf     PIE3,IC1IE              ;Cap1 interrupt
+0001B6 84A3           00401         bsf     PIE3,IC2QEIE    ;Cap2 interrupt
+0001B8 86A3           00402         bsf     PIE3,IC3DRIE    ;Cap3 interrupt
+                      00403 
+                      00404 
+0001BA 0012           00405         RETURN
+                      00406         
+                      00407 ;******************************************************************
+                      00408 ;******************************************************************
+                      00409 ;PWM initialization
+                      00410 ;-----------------------------------------------------------------
+0001BC                00411 INITIALIZE_PCPWM
+                      00412 
+0001BC 0E00           00413         movlw   b'00000000'
+0001BE 6E7F           00414         movwf   PTCON0
+                      00415         
+0001C0 0E37           00416         movlw   0x37    ; 20KHz = 0xFA          ;20KHz of PWM frequency                 
+0001C2 6E7B           00417         movwf   PTPERL  ;16KHz = 0x137
+                      00418                                         ;12KHz = 0x1A0  
+0001C4 0E01           00419         movlw   0x01
+0001C6 6E7A           00420         movwf   PTPERH
+                      00421         
+0001C8 0E4F           00422         movlw   b'01001111'     ;PWM0-5 enabled in independent mode
+0001CA 6E6F           00423         movwf   PWMCON0
+                      00424         
+0001CC 0E01           00425         movlw   b'00000001'     ;Output overides synched wrt PWM timebase
+0001CE 6E6E           00426         movwf   PWMCON1
+                      00427         
+0001D0 0E00           00428         movlw   b'00000000'     ;No dead time
+0001D2 6E6D           00429         movwf   DTCON
+                      00430         
+0001D4 0E00           00431         movlw   b'00000000'     ;PWM0-5 PWM Duty cycle on overide 
+0001D6 6E6B           00432         movwf   OVDCOND
+                      00433         
+0001D8 0E00           00434         movlw   b'00000000'     ; All PWMs = 0 on init
+0001DA 6E6A           00435         movwf   OVDCONS
+                      00436         
+0001DC 0E83           00437         movlw   b'10000011'     ;FaultA ON in cycle-by-cycle mode
+0001DE 6E6C           00438         movwf   FLTCONFIG
+                      00439         
+0001E0 0E00           00440         movlw   0x00                    ;No special event trigger
+0001E2 6E71           00441         movwf   SEVTCMPL
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 15
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0001E4 0E00           00442         movlw   0x00
+0001E6 6E70           00443         movwf   SEVTCMPH
+                      00444 
+0001E8 6A79           00445         clrf    PDC0L                   ;All PWM duty cycles cleared
+0001EA 6A77           00446         clrf    PDC1L   
+0001EC 6A75           00447         clrf    PDC2L   
+                      00448 ;       clrf    PDC3L   
+0001EE 6A78           00449         clrf    PDC0H   
+0001F0 6A76           00450         clrf    PDC1H   
+0001F2 6A74           00451         clrf    PDC2H   
+                      00452 ;       clrf    PDC3H   
+                      00453 
+0001F4 0E80           00454         movlw   b'10000000'             ;PWM timer ON
+0001F6 6E7E           00455         movwf   PTCON1
+                      00456 
+                      00457 
+0001F8 0012           00458         return
+                      00459 
+                      00460 ;******************************************************************
+                      00461 ;******************************************************************
+                      00462 ;This routine loads the switching sequence to the RAM locations
+                      00463 ;-----------------------------------------------------------------
+0001FA                00464 LOAD_SEQUENCE_TABLE
+                      00465 ;Forward sequence
+0001FA 0E00           00466         movlw   POSITION0
+0001FC 6E??           00467         movwf   POSITION_TABLE_FWD
+0001FE 0E12           00468         movlw   POSITION1
+000200 6E??           00469         movwf   POSITION_TABLE_FWD+1
+000202 0E24           00470         movlw   POSITION2
+000204 6E??           00471         movwf   POSITION_TABLE_FWD+2
+000206 0E06           00472         movlw   POSITION3
+000208 6E??           00473         movwf   POSITION_TABLE_FWD+3
+00020A 0E09           00474         movlw   POSITION4
+00020C 6E??           00475         movwf   POSITION_TABLE_FWD+4
+00020E 0E18           00476         movlw   POSITION5
+000210 6E??           00477         movwf   POSITION_TABLE_FWD+5
+000212 0E21           00478         movlw   POSITION6
+000214 6E??           00479         movwf   POSITION_TABLE_FWD+6
+000216 0E00           00480         movlw   POSITION7
+000218 6E??           00481         movwf   POSITION_TABLE_FWD+7
+                      00482 ;Reverse sequence
+00021A 0E00           00483         movlw   POSITION7
+00021C 6E??           00484         movwf   POSITION_TABLE_REV
+00021E 0E21           00485         movlw   POSITION6
+000220 6E??           00486         movwf   POSITION_TABLE_REV+1
+000222 0E18           00487         movlw   POSITION5
+000224 6E??           00488         movwf   POSITION_TABLE_REV+2
+000226 0E09           00489         movlw   POSITION4
+000228 6E??           00490         movwf   POSITION_TABLE_REV+3
+00022A 0E06           00491         movlw   POSITION3
+00022C 6E??           00492         movwf   POSITION_TABLE_REV+4
+00022E 0E24           00493         movlw   POSITION2
+000230 6E??           00494         movwf   POSITION_TABLE_REV+5
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 16
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000232 0E12           00495         movlw   POSITION1
+000234 6E??           00496         movwf   POSITION_TABLE_REV+6
+000236 0E00           00497         movlw   POSITION0
+000238 6E??           00498         movwf   POSITION_TABLE_REV+7    
+                      00499 
+00023A 0012           00500         RETURN
+                      00501 ;*******************************************************************************
+                      00502 ;This routine checks for the keys status. 2 keys are checked, Run/Stop and 
+                      00503 ;Forward(FWD)/Reverse(REV)  
+                      00504 ;*******************************************************************************
+00023C                00505 KEY_CHECK
+00023C B082           00506         btfsc   KEY_PORT,RUN_STOP_KEY                   ;Is key pressed "RUN/STOP"?
+00023E EF?? F???      00507         goto    CHECK_FWD_REV_KEY
+000242 B0??           00508         btfsc   FLAGS1,DEBOUNCE
+000244 0012           00509         return
+000246 EC?? F???      00510         call    KEY_DEBOUNCE                                    ;Debounce delay
+00024A A0??           00511         btfss   FLAGS1,DEBOUNCE
+00024C 0012           00512         return
+00024E 82??           00513         bsf             FLAGS1,KEY_RS                                   ;Set a flag indicating Run/Stop 
+                            key is pressed
+000250 0012           00514         return
+                      00515         
+000252                00516 CHECK_FWD_REV_KEY
+000252 B482           00517         btfsc   KEY_PORT,FWD_REV_KEY                    ;Is key pressed "RUN/STOP"?
+000254 EF?? F???      00518         goto    SET_KEYS
+000258 B0??           00519         btfsc   FLAGS1,DEBOUNCE
+00025A 0012           00520         return
+00025C EC?? F???      00521         call    KEY_DEBOUNCE                                    ;Debounce delay
+000260 A0??           00522         btfss   FLAGS1,DEBOUNCE
+000262 0012           00523         return
+000264 84??           00524         bsf             FLAGS1,KEY_FR                                   ;Set a flag indicating FWD/REV k
+                            ey is pressed
+000266 0012           00525         return
+                      00526 
+000268                00527 SET_KEYS
+000268 A0??           00528         btfss   FLAGS1,DEBOUNCE
+00026A 0012           00529         return
+00026C 90??           00530         bcf             FLAGS1,DEBOUNCE
+00026E 86??           00531         bsf             FLAGS1,KEY_PRESSED      
+000270 A2??           00532         btfss   FLAGS1,KEY_RS
+000272 D???           00533         bra             ITS_FWD_REV     
+000274 78??           00534         btg             FLAGS1,RUN_STOP
+000276 0012           00535         return
+000278                00536 ITS_FWD_REV     
+000278 7A??           00537         btg             FLAGS1,FWD_REV
+00027A 0012           00538         return
+                      00539 
+                      00540 
+                      00541 ;*******************************************************************************
+                      00542 ;Key debounce routine; checks keys being pressed for at least for a minimum time(DEBOUNCE_COUNT)
+00027C                00543 KEY_DEBOUNCE
+00027C 2E??           00544         decfsz  DEBOUNCE_COUNTER,F
+00027E 0012           00545         return
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 17
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000280 80??           00546         bsf             FLAGS1,DEBOUNCE
+000282 0E8F           00547         movlw   DEBOUNCE_COUNT
+000284 6E??           00548         movwf   DEBOUNCE_COUNTER
+000286 0012           00549         return
+                      00550 
+                      00551 ;*******************************************************************************
+                      00552 ;This routine takes action for the key pressed. 
+                      00553 ;*******************************************************************************
+000288                00554 PROCESS_KEY_PRESSED
+000288 A6??           00555         btfss   FLAGS1,KEY_PRESSED                      ;Is there a key pressed waiting or service
+00028A 0012           00556         return                                                          ;No
+00028C A2??           00557         btfss   FLAGS1,KEY_RS                           ;Is it RUN/STOP
+00028E EF?? F???      00558         goto    CHECK_FWD_REV
+000292 A8??           00559         btfss   FLAGS1,RUN_STOP                                 
+000294 EF?? F???      00560         goto    STOP_MOTOR_NOW
+000298 EC?? F???      00561         call    RUN_MOTOR_AGAIN                         ;If it is RUN,re initialize the states to run th
+                            e motor
+00029C 96??           00562         bcf             FLAGS1,KEY_PRESSED
+00029E 92??           00563         bcf             FLAGS1,KEY_RS
+                      00564 
+0002A0 8A82           00565         bsf             LED_PORT,RUN_STOP_LED           ;Turn the RUN LED ON
+0002A2 0012           00566         return
+                      00567 
+0002A4                00568 STOP_MOTOR_NOW
+0002A4 EC?? F???      00569         call    STOP_MOTOR                                      ;STOP motor
+0002A8 96??           00570         bcf             FLAGS1,KEY_PRESSED
+0002AA 92??           00571         bcf             FLAGS1,KEY_RS
+0002AC 9A82           00572         bcf             LED_PORT,RUN_STOP_LED           ;Turn the RUN LED OFF
+0002AE 0012           00573         return
+                      00574 
+0002B0                00575 CHECK_FWD_REV                                                   ;If the key pressed is FWD/REV
+0002B0 A4??           00576         btfss   FLAGS1,KEY_FR
+0002B2 0012           00577         return
+                      00578 
+0002B4 7882           00579         btg             LED_PORT,FWD_REV_LED            ;Toggle the LED
+                      00580 
+0002B6 9A82           00581         bcf             LED_PORT,RUN_STOP_LED           
+0002B8 EC?? F???      00582         call    STOP_MOTOR                                      ;Stop the motor before reversing the sta
+                            te
+                      00583 
+0002BC EC?? F???      00584         call    DELAY                                           ;Call a long delay to make sure the moto
+                            r reversed.
+0002C0 EC?? F???      00585         call    DELAY
+0002C4 EC?? F???      00586         call    DELAY
+0002C8 EC?? F???      00587         call    DELAY
+                      00588 
+0002CC EC?? F???      00589         call    RUN_MOTOR_AGAIN                         ;Re-initialize the states to run the motor in op
+                            posite direction
+0002D0 96??           00590         bcf             FLAGS1,KEY_PRESSED
+0002D2 94??           00591         bcf             FLAGS1,KEY_FR
+0002D4 8A82           00592         bsf             LED_PORT,RUN_STOP_LED           ;Turn ON RUN LED        
+0002D6 0012           00593         return
+                      00594 
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 18
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00595 ;*******************************************************************************
+                      00596 ;This routine stops the motor by driving the PWMs to 0% duty cycle.
+                      00597 ;*******************************************************************************
+0002D8                00598 STOP_MOTOR
+0002D8 9C9D           00599         bcf             PIE1,ADIE               ;       
+0002DA 92A3           00600         bcf             PIE3,IC1IE              ;IC1 interrupt
+0002DC 96A3           00601         bcf             PIE3,IC3DRIE    ;IC3 interrupt
+0002DE 94A3           00602         bcf             PIE3,IC2QEIE    ;IC2 interrupt
+0002E0 98A3           00603         bcf             PIE3,PTIE               ;PWM interrupt
+0002E2 6A6B           00604         clrf    OVDCOND                 ;STOP motor
+0002E4 6A78           00605         clrf    PDC0H                   ;Clear PWM duty cycles
+0002E6 6A76           00606         clrf    PDC1H
+0002E8 6A74           00607         clrf    PDC2H   
+                      00608 ;       clrf    PDC3H   
+0002EA 6A79           00609         clrf    PDC0L   
+0002EC 6A77           00610         clrf    PDC1L
+0002EE 6A75           00611         clrf    PDC2L
+                      00612 ;       clrf    PDC3L
+0002F0 9C??           00613         bcf             FLAGS,CALC_PWM
+0002F2 6A??           00614         clrf    SPEED_REFH
+0002F4 0012           00615         return
+                      00616 ;*******************************************************************************
+                      00617 ;This routine starts motor from previous stop with motor parameters initialized
+                      00618 ;*******************************************************************************
+0002F6                00619 RUN_MOTOR_AGAIN
+0002F6 88??           00620         bsf             FLAGS1,RUN_STOP 
+                      00621 ;-----------------------------------------------------------------
+0002F8 6A??           00622         clrf    SPEED_REFH
+0002FA 6A??           00623         clrf    MOTOR_CURRENTH
+0002FC 6A??           00624         clrf    MOTOR_CURRENTL
+                      00625 
+                      00626 ;-----------------------------------------------------------------
+0002FE 8C9D           00627         bsf             PIE1,ADIE
+000300 82A3           00628         bsf             PIE3,IC1IE                      ;IC1 interrupt
+000302 86A3           00629         bsf             PIE3,IC3DRIE            ;IC3 interrupt
+000304 84A3           00630         bsf             PIE3,IC2QEIE            ;IC2 interrupt
+000306 88A3           00631         bsf             PIE3,PTIE                       ;PWM interrupt
+000308 6A??           00632         clrf    FLAGS
+                      00633 
+00030A 0E83           00634         movlw   b'10000011'                     ;FaultA is enabled in cycle-by-cycle mode, HMIN mode is 
+                            enabled 
+00030C 6E6C           00635         movwf   FLTCONFIG
+                      00636 
+00030E 90??           00637         bcf             FLT_FLAGS,OCUR          ;clear over current fault flag          
+000310 94??           00638         bcf             FLT_FLAGS,OTEMP         ;Clear over temp flag
+                      00639 
+000312 EC?? F???      00640         call    UPDATE_SEQUENCE         ;Re initialize the energizing sequence
+000316 0012           00641         return
+                      00642 
+                      00643 ;*******************************************************************************
+                      00644 ;On POR, turn on LEDs according to the potentiomer level >25% LED1,>50%LED2 and >80% LED3
+000318                00645 LED_ON_OFF
+000318 9A82           00646         bcf             LED1
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 19
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00031A 9882           00647         bcf             LED2
+00031C 9682           00648         bcf             LED3
+                      00649 
+00031E 0E40           00650         movlw   0X40
+000320 64??           00651         cpfsgt  SPEED_REFH      
+000322 0012           00652         return
+000324 8A82           00653         bsf             LED1
+000326 0E80           00654         movlw   0x80
+000328 64??           00655         cpfsgt  SPEED_REFH
+00032A 0012           00656         return
+00032C 8882           00657         bsf             LED2
+00032E 0ED0           00658         movlw   0XD0
+000330 64??           00659         cpfsgt  SPEED_REFH      
+000332 0012           00660         return
+000334 8682           00661         bsf             LED3
+000336 0012           00662         return
+                      00663         
+                      00664 
+                      00665 ;*******************************************************************************
+                      00666 ;Delay routine.
+                      00667 ;*******************************************************************************
+000338                00668 DELAY
+000338 0EFF           00669         movlw   DELAY_COUNT1
+00033A 6E??           00670         movwf   COUNTER
+00033C                00671 dec_count       
+00033C 0EFF           00672         movlw   DELAY_COUNT2
+00033E 6E??           00673         movwf   COUNTER1
+000340                00674 dec_count1
+000340 2E??           00675         decfsz  COUNTER1,F
+000342 EF?? F???      00676         goto    dec_count1
+000346 2E??           00677         decfsz  COUNTER,F
+000348 EF?? F???      00678         goto    dec_count
+00034C 6A??           00679         clrf    COUNTER
+00034E 6A??           00680         clrf    COUNTER1
+000350 0012           00681         return          
+                      00682 
+                      00683 ;*******************************************************************************
+                      00684 ;Display routine displays parameters on Hyper terminal
+000352                00685 DISPLAY_ROUTINE
+000352 3E??           00686         incfsz  DISPLAY_COUNT,F
+000354 0012           00687         return
+000356 C??? F???      00688         movff   SPEED_REFH,DISPLAY_SPEED_REF            ;Speed ref,potetiometer(R14) in hex
+00035A C??? F???      00689         movff   MOTOR_CURRENTH,DISPLAY_CURRENT_Iu       ;Motor current read 8 bit MSB, in hex
+00035E C??? F???      00690         movff   CAP1H,DISPALY_CAP1_H                            ;Hall sensorA, pulse width wrt previous 
+                            Hall transition, Timer5 value in hex
+000362 C??? F???      00691         movff   CAP1L,DISPALY_CAP1_L                            ;Speed in RPM = 60*(5,000,000/(Timer5Cou
+                            nt*8*6*polepairs))
+000366 C??? F???      00692         movff   CAP2H,DISPALY_CAP2_H                            ;Hall sensorB, pulse width wrt previous 
+                            Hall transition, Timer5 value in hex
+00036A C??? F???      00693         movff   CAP2L,DISPALY_CAP2_L                            ;;Speed in RPM = 60*(5,000,000/(Timer5Co
+                            unt*8*6*polepairs))
+00036E C??? F???      00694         movff   CAP3H,DISPALY_CAP3_H                            ;Hall sensorB, pulse width wrt previous 
+                            Hall transition, Timer5 value in hex
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 20
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000372 C??? F???      00695         movff   CAP3L,DISPALY_CAP3_L                            ;Speed in RPM = 60*(5,000,000/(Timer5Cou
+                            nt*8*6*polepairs))
+000376 EC?? F???      00696         call    DISPLAY_PARAMETERS
+00037A 0012           00697         return
+                      00698         
+                      00699 
+                      00700 ;*******************************************************************************
+                      00701         
+                      00702         END
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 21
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+A                                 00000000
+ABDEN                             00000000
+ACCESS                            00000000
+ACMOD0                            00000002
+ACMOD1                            00000003
+ACONV                             00000005
+ACQT0                             00000003
+ACQT1                             00000004
+ACQT2                             00000005
+ACQT3                             00000006
+ACSCH                             00000004
+ADCHS                             00000F99
+ADCHS_VALUE                       b'00000000'
+ADCON0                            00000FC2
+ADCON0_VALUE                      b'00010001'
+ADCON1                            00000FC1
+ADCON1_VALUE                      b'00010000'
+ADCON2                            00000FC0
+ADCON2_VALUE                      b'00110010'
+ADCON3                            00000F9A
+ADCON3_VALUE                      b'01000000'
+ADCS0                             00000000
+ADCS1                             00000001
+ADCS2                             00000002
+ADC_INT                           00000068
+ADEN                              00000003
+ADFM                              00000007
+ADIE                              00000006
+ADIF                              00000006
+ADIP                              00000006
+ADON                              00000000
+ADPNT0                            00000000
+ADPNT1                            00000001
+ADRES                             00000FC3
+ADRESH                            00000FC4
+ADRESL                            00000FC3
+ADRS0                             00000006
+ADRS1                             00000007
+AN0                               00000000
+AN1                               00000001
+AN2                               00000002
+AN3                               00000003
+AN4                               00000005
+ANS0                              00000000
+ANS1                              00000001
+ANS2                              00000002
+ANS3                              00000003
+ANS4                              00000004
+ANSEL0                            00000FB8
+ANSEL0_VALUE                      b'00000011'
+ANSEL1                            00000FB9
+ANSEL1_VALUE                      b'00000000'
+BANKED                            00000001
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 22
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+BAUDCON                           00000FAA
+BAUDCTL                           00000FAA
+BF                                00000000
+BFEMT                             00000003
+BFOVFL                            00000002
+BOR                               00000000
+BRFEN                             00000007
+BRG16                             00000003
+BRGH                              00000002
+BSR                               00000FE0
+C                                 00000000
+CALC_PWM                          6
+CAP1BUFH                          00000F69
+CAP1BUFL                          00000F68
+CAP1CON                           00000F63
+CAP1H                             00000022
+CAP1L                             00000023
+CAP1M0                            00000000
+CAP1M1                            00000001
+CAP1M2                            00000002
+CAP1M3                            00000003
+CAP1REN                           00000006
+CAP1TMR                           00000005
+CAP2BUFH                          00000F67
+CAP2BUFL                          00000F66
+CAP2CON                           00000F62
+CAP2H                             00000024
+CAP2L                             00000025
+CAP2M0                            00000000
+CAP2M1                            00000001
+CAP2M2                            00000002
+CAP2M3                            00000003
+CAP2REN                           00000006
+CAP2TMR                           00000005
+CAP3BUFH                          00000F65
+CAP3BUFL                          00000F64
+CAP3CON                           00000F61
+CAP3H                             00000026
+CAP3L                             00000027
+CAP3M0                            00000000
+CAP3M1                            00000001
+CAP3M2                            00000002
+CAP3M3                            00000003
+CAP3REN                           00000006
+CAP3TMR                           00000005
+CCP1                              00000002
+CCP1CON                           00000FBD
+CCP1IE                            00000002
+CCP1IF                            00000002
+CCP1IP                            00000002
+CCP1M0                            00000000
+CCP1M1                            00000001
+CCP1M2                            00000002
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 23
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+CCP1M3                            00000003
+CCP1X                             00000005
+CCP1Y                             00000004
+CCP2                              00000001
+CCP2CON                           00000FBA
+CCP2IE                            00000000
+CCP2IF                            00000000
+CCP2IP                            00000000
+CCP2M0                            00000000
+CCP2M1                            00000001
+CCP2M2                            00000002
+CCP2M3                            00000003
+CCP2X                             00000005
+CCP2Y                             00000004
+CCPR1                             00000FBE
+CCPR1H                            00000FBF
+CCPR1L                            00000FBE
+CCPR2                             00000FBB
+CCPR2H                            00000FBC
+CCPR2L                            00000FBB
+CFGS                              00000006
+CHECK_FOR_FAULTS                  00000142
+CHECK_FWD_REV                     000002B0
+CHECK_FWD_REV_KEY                 00000252
+CHECK_PARAMETER_DISPLAY           00000152
+CK                                00000006
+CKE                               00000006
+CKP                               00000004
+CLKO                              00000006
+COUNTER                           00000005
+COUNTER1                          00000006
+CREN                              00000004
+CSRC                              00000007
+CYCLE_COUNTH                      0000001B
+CYCLE_COUNTL                      0000001C
+CYCLE_COUNT_MAXH                  0x4E
+CYCLE_COUNT_MAXL                  0x20
+D                                 00000005
+DATA_ADDRESS                      00000005
+DC                                00000001
+DC1B0                             00000004
+DC1B1                             00000005
+DC2B0                             00000004
+DC2B1                             00000005
+DC_INPUT_VOLTAGE                  d'24'
+DDRA                              TRISA
+DDRB                              TRISB
+DDRC                              TRISC
+DDRD                              TRISD
+DDRE                              TRISE
+DEBOUNCE                          0
+DEBOUNCE_COUNT                    0x8F
+DEBOUNCE_COUNTER                  00000004
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 24
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+DELAY                             00000338
+DELAY_COUNT1                      0xFF
+DELAY_COUNT2                      0xFF
+DFLTCON                           00000F60
+DISPALY_CAP1_H                    00000000
+DISPALY_CAP1_L                    00000000
+DISPALY_CAP2_H                    00000000
+DISPALY_CAP2_L                    00000000
+DISPALY_CAP3_H                    00000000
+DISPALY_CAP3_L                    00000000
+DISPLAY_COUNT                     00000021
+DISPLAY_CURRENT_Iu                00000000
+DISPLAY_PARAMETERS                00000000
+DISPLAY_ROUTINE                   00000352
+DISPLAY_SPEED_REF                 00000000
+DONE                              00000001
+DOWN                              00000005
+DT0                               00000000
+DT1                               00000001
+DT2                               00000002
+DT3                               00000003
+DT4                               00000004
+DT5                               00000005
+DTA0                              00000000
+DTA1                              00000001
+DTA2                              00000002
+DTA3                              00000003
+DTA4                              00000004
+DTA5                              00000005
+DTAPS0                            00000006
+DTAPS1                            00000007
+DTCON                             00000F6D
+DTPS0                             00000006
+DTPS1                             00000007
+D_A                               00000005
+EEADR                             00000FA9
+EECON1                            00000FA6
+EECON2                            00000FA7
+EEDATA                            00000FA8
+EEIE                              00000004
+EEIF                              00000004
+EEIP                              00000004
+EEPGD                             00000007
+ENCODER_PPR                       d'1024'
+ERROR_PWM_CONSTANT                00000007
+ESTIMATE_TIMER_CONSTANT           00002711
+FAST                              00000001
+FAULTA_COUNT                      0000001D
+FERR                              00000002
+FFOVFL                            00000002
+FIFOEN                            00000004
+FLAGS                             00000002
+FLAGS1                            00000003
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 25
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+FLAG_FAULT                        1
+FLT1EN                            00000003
+FLT2EN                            00000004
+FLT3EN                            00000005
+FLT4EN                            00000006
+FLTA                              00000001
+FLTAEN                            00000000
+FLTAMOD                           00000001
+FLTAS                             00000002
+FLTB                              00000002
+FLTBEN                            00000004
+FLTBMOD                           00000005
+FLTBS                             00000006
+FLTCK0                            00000000
+FLTCK1                            00000001
+FLTCK2                            00000002
+FLTCON                            00000003
+FLTCONFIG                         00000F6C
+FLTS                              00000002
+FLT_FLAGS                         0000001F
+FREE                              00000004
+FSR0                              00000000
+FSR0H                             00000FEA
+FSR0L                             00000FE9
+FSR1                              00000001
+FSR1H                             00000FE2
+FSR1L                             00000FE1
+FSR2                              00000002
+FSR2H                             00000FDA
+FSR2L                             00000FD9
+FWD_REV                           5
+FWD_REV_KEY                       2
+FWD_REV_LED                       4
+GASEL0                            00000000
+GASEL1                            00000001
+GBSEL0                            00000004
+GBSEL1                            00000005
+GCSEL0                            00000002
+GCSEL1                            00000003
+GDSEL0                            00000006
+GDSEL1                            00000007
+GIE                               00000007
+GIEH                              00000007
+GIEL                              00000006
+GO                                00000001
+GO_DONE                           00000001
+HALL_A_HIGH                       0000007E
+HALL_B_HIGH                       00000094
+HALL_C_HIGH                       000000AA
+HALL_FLAG                         0
+IC1IE                             00000001
+IC1IF                             00000001
+IC1IP                             00000001
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 26
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+IC2QEIE                           00000002
+IC2QEIF                           00000002
+IC2QEIP                           00000002
+IC3DRIE                           00000003
+IC3DRIF                           00000003
+IC3DRIP                           00000003
+IDLEN                             00000007
+INDF0                             00000FEF
+INDF1                             00000FE7
+INDF2                             00000FDF
+INITIALIZE_ADC                    00000174
+INITIALIZE_INPUT_CAPTURE          00000196
+INITIALIZE_PCPWM                  000001BC
+INITIALIZE_SERIAL_PORT            00000000
+INSTRUCTION_CYCLE                 004C4B40
+INT0                              00000003
+INT0E                             00000004
+INT0F                             00000001
+INT0IE                            00000004
+INT0IF                            00000001
+INT1                              00000004
+INT1E                             00000003
+INT1F                             00000000
+INT1IE                            00000003
+INT1IF                            00000000
+INT1IP                            00000006
+INT1P                             00000006
+INT2                              00000005
+INT2E                             00000004
+INT2F                             00000001
+INT2IE                            00000004
+INT2IF                            00000001
+INT2IP                            00000007
+INT2P                             00000007
+INTCON                            00000FF2
+INTCON2                           00000FF1
+INTCON3                           00000FF0
+INTEDG0                           00000006
+INTEDG1                           00000005
+INTEDG2                           00000004
+IOFS                              00000002
+IPEN                              00000007
+IPR1                              00000F9F
+IPR2                              00000FA2
+IPR3                              00000FA5
+IRCF0                             00000004
+IRCF1                             00000005
+IRCF2                             00000006
+IRVST                             00000005
+ISR_HIGH                          00000052
+ISR_LOW                           000000C0
+ITS_FWD_REV                       00000278
+ITS_REVERSE                       000000CC
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 27
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+IVRST                             00000005
+KEEP_SAME_PWM                     00000042
+KEY_CHECK                         0000023C
+KEY_DEBOUNCE                      0000027C
+KEY_FR                            2
+KEY_PORT                          PORTC
+KEY_PRESSED                       3
+KEY_RS                            1
+LATA                              00000F89
+LATA0                             00000000
+LATA1                             00000001
+LATA2                             00000002
+LATA3                             00000003
+LATA4                             00000004
+LATA6                             00000006
+LATA7                             00000007
+LATB                              00000F8A
+LATB0                             00000000
+LATB1                             00000001
+LATB2                             00000002
+LATB3                             00000003
+LATB4                             00000004
+LATB5                             00000005
+LATB6                             00000006
+LATB7                             00000007
+LATC                              00000F8B
+LATC0                             00000000
+LATC1                             00000001
+LATC2                             00000002
+LATC3                             00000003
+LATC4                             00000004
+LATC5                             00000005
+LATC6                             00000006
+LATC7                             00000007
+LED1                              PORTC,5
+LED2                              PORTC,4
+LED3                              PORTC,3
+LED_ON_OFF                        00000318
+LED_PORT                          PORTC
+LOAD_SEQUENCE_TABLE               000001FA
+LVDCON                            00000FD2
+LVDEN                             00000004
+LVDIE                             00000002
+LVDIF                             00000002
+LVDIP                             00000002
+LVDL0                             00000000
+LVDL1                             00000001
+LVDL2                             00000002
+LVDL3                             00000003
+MAIN_LOOP                         00000034
+MAIN_PWM_CONSTANT                 0000004D
+MAXCNTH                           00000F65
+MAXCNTL                           00000F64
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 28
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+MAX_FLTA_COUNT                    0x80
+MAX_PWM_VALUE                     00000372
+MOTOR_CURRENTH                    00000017
+MOTOR_CURRENTL                    00000018
+MOTOR_RATED_SPEED                 d'2500'
+MOTOR_VOLTAGE                     d'24'
+N                                 00000004
+NEGATIVE_ERROR                    5
+NOT_A                             00000005
+NOT_ADDRESS                       00000005
+NOT_BOR                           00000000
+NOT_DONE                          00000001
+NOT_DOWN                          00000005
+NOT_FLTA                          00000001
+NOT_FLTB                          00000002
+NOT_IPEN                          00000007
+NOT_PD                            00000002
+NOT_POR                           00000001
+NOT_RBPU                          00000007
+NOT_RESEN                         00000006
+NOT_RI                            00000004
+NOT_SS                            00000006
+NOT_T1SYNC                        00000002
+NOT_T5SYNC                        00000002
+NOT_TO                            00000003
+NOT_VELM                          00000007
+NOT_W                             00000002
+NOT_WRITE                         00000002
+NOT_YET_THERE                     0000016A
+OCUR                              0
+OERR                              00000001
+OSC2                              00000006
+OSCCON                            00000FD3
+OSCILLATOR                        d'20000000'
+OSCTUNE                           00000F9B
+OSFIE                             00000007
+OSFIF                             00000007
+OSFIP                             00000007
+OSTS                              00000003
+OSYNC                             00000000
+OTEMP                             2
+OV                                00000003
+OVDCOND                           00000F6B
+OVDCONS                           00000F6A
+OVOLT                             1
+P                                 00000004
+PARAM_DISPLAY                     2
+PC                                00000FF9
+PCL                               00000FF9
+PCLATH                            00000FFA
+PCLATU                            00000FFB
+PD                                00000002
+PDC0H                             00000F78
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 29
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+PDC0L                             00000F79
+PDC1H                             00000F76
+PDC1L                             00000F77
+PDC2H                             00000F74
+PDC2L                             00000F75
+PDC_TEMPH                         00000019
+PDC_TEMPL                         0000001A
+PDEC0                             00000000
+PDEC1                             00000001
+PEIE                              00000006
+PICDEM_MC_LV                      
+PICK_ENERGIZING_SEQUENCE          000000D6
+PICK_FROM_TABLE                   000000D0
+PIE1                              00000F9D
+PIE2                              00000FA0
+PIE3                              00000FA3
+PIR1                              00000F9E
+PIR2                              00000FA1
+PIR3                              00000FA4
+PLUSW0                            00000FEB
+PLUSW1                            00000FE3
+PLUSW2                            00000FDB
+PMOD0                             00000000
+PMOD1                             00000001
+PMOD2                             00000002
+PMOD3                             00000003
+POR                               00000001
+PORTA                             00000F80
+PORTB                             00000F81
+PORTC                             00000F82
+PORTE                             00000F84
+POSCNTH                           00000F67
+POSCNTL                           00000F66
+POSITION0                         b'00000000'
+POSITION1                         b'00010010'
+POSITION2                         b'00100100'
+POSITION3                         b'00000110'
+POSITION4                         b'00001001'
+POSITION5                         b'00011000'
+POSITION6                         b'00100001'
+POSITION7                         b'00000000'
+POSITION_BIT                      3
+POSITION_TABLE_FWD                00000007
+POSITION_TABLE_REV                0000000F
+POSTDEC0                          00000FED
+POSTDEC1                          00000FE5
+POSTDEC2                          00000FDD
+POSTINC0                          00000FEE
+POSTINC1                          00000FE6
+POSTINC2                          00000FDE
+POUT0                             00000000
+POUT1                             00000001
+POUT2                             00000002
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 30
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+POUT3                             00000003
+POUT4                             00000004
+POUT5                             00000005
+POUT6                             00000006
+POUT7                             00000007
+POVD0                             00000000
+POVD1                             00000001
+POVD2                             00000002
+POVD3                             00000003
+POVD4                             00000004
+POVD5                             00000005
+POVD6                             00000006
+POVD7                             00000007
+PR2                               00000FCB
+PR5H                              00000F91
+PR5L                              00000F90
+PREINC0                           00000FEC
+PREINC1                           00000FE4
+PREINC2                           00000FDC
+PROCESS_KEY_PRESSED               00000288
+PROD                              00000FF3
+PRODH                             00000FF4
+PRODL                             00000FF3
+PSA                               00000003
+PTCKPS0                           00000002
+PTCKPS1                           00000003
+PTCON0                            00000F7F
+PTCON1                            00000F7E
+PTDIR                             00000006
+PTEN                              00000007
+PTIE                              00000004
+PTIF                              00000004
+PTIP                              00000004
+PTMOD0                            00000000
+PTMOD1                            00000001
+PTMRH                             00000F7C
+PTMRL                             00000F7D
+PTOPS0                            00000004
+PTOPS1                            00000005
+PTOPS2                            00000006
+PTOPS3                            00000007
+PTPERH                            00000F7A
+PTPERL                            00000F7B
+PTPER_VALUE                       00000137
+PWMCON0                           00000F6F
+PWMCON1                           00000F6E
+PWMEN0                            00000004
+PWMEN1                            00000005
+PWMEN2                            00000006
+PWM_CYCLE_COUNT                   0000001E
+PWM_FREQUENCY                     d'16000'
+PWM_INTERRUPT                     0000013A
+PWM_TIMER_PRESCALE                d'01'
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 31
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+QEICON                            00000FB6
+QEIM0                             00000002
+QEIM1                             00000003
+QEIM2                             00000004
+QEI_X_UPDATE                      d'2'
+R                                 00000002
+RA0                               00000000
+RA1                               00000001
+RA2                               00000002
+RA3                               00000003
+RA4                               00000004
+RA6                               00000006
+RA7                               00000007
+RB0                               00000000
+RB1                               00000001
+RB2                               00000002
+RB3                               00000003
+RB4                               00000004
+RB5                               00000005
+RB6                               00000006
+RB7                               00000007
+RBIE                              00000003
+RBIF                              00000000
+RBIP                              00000000
+RBPU                              00000007
+RC0                               00000000
+RC1                               00000001
+RC2                               00000002
+RC3                               00000003
+RC4                               00000004
+RC5                               00000005
+RC6                               00000006
+RC7                               00000007
+RCIDL                             00000006
+RCIE                              00000005
+RCIF                              00000005
+RCIP                              00000005
+RCON                              00000FD0
+RCREG                             00000FAE
+RCSTA                             00000FAB
+RD                                00000000
+RD16                              00000007
+RE3                               00000003
+READ_WRITE                        00000002
+RESEN                             00000006
+RESET_DUTY_CYCLE                  00000128
+RI                                00000004
+RPM_CONSTANT_HALL                 0000CB73
+RPM_CONSTANT_QEI                  00004C48
+RUN_MOTOR_AGAIN                   000002F6
+RUN_STOP                          4
+RUN_STOP_KEY                      0
+RUN_STOP_LED                      5
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 32
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+RX                                00000007
+RX9                               00000006
+RX9D                              00000000
+R_W                               00000002
+S                                 00000003
+SASEL0                            00000000
+SASEL1                            00000001
+SBSEL0                            00000004
+SBSEL1                            00000005
+SCK                               00000005
+SCKP                              00000004
+SCL                               00000005
+SCS0                              00000000
+SCS1                              00000001
+SCSEL0                            00000002
+SCSEL1                            00000003
+SDA                               00000004
+SDI                               00000004
+SDO                               00000007
+SDSEL0                            00000006
+SDSEL1                            00000007
+SENDB                             00000003
+SET_KEYS                          00000268
+SEVOPS0                           00000004
+SEVOPS1                           00000005
+SEVOPS2                           00000006
+SEVOPS3                           00000007
+SEVTCMPH                          00000F70
+SEVTCMPL                          00000F71
+SEVTDIR                           00000003
+SMP                               00000007
+SPBRG                             00000FAF
+SPBRGH                            00000FB0
+SPEED_REFH                        00000000
+SPEED_REFL                        00000001
+SPEED_REF_OK                      000000F6
+SPEN                              00000007
+SREN                              00000005
+SS                                00000006
+SSPADD                            00000FC8
+SSPBUF                            00000FC9
+SSPCON                            00000FC6
+SSPEN                             00000005
+SSPIE                             00000003
+SSPIF                             00000003
+SSPIP                             00000003
+SSPM0                             00000000
+SSPM1                             00000001
+SSPM2                             00000002
+SSPM3                             00000003
+SSPOV                             00000006
+SSPSTAT                           00000FC7
+SSRC0                             00000000
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 33
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+SSRC1                             00000001
+SSRC2                             00000002
+SSRC3                             00000003
+SSRC4                             00000004
+STATUS                            00000FD8
+STKFUL                            00000007
+STKOVF                            00000007
+STKPTR                            00000FFC
+STKPTR0                           00000000
+STKPTR1                           00000001
+STKPTR2                           00000002
+STKPTR3                           00000003
+STKPTR4                           00000004
+STKUNF                            00000006
+STOP_MOTOR                        000002D8
+STOP_MOTOR_NOW                    000002A4
+SWDTEN                            00000000
+SYNC                              00000004
+Start                             00000000
+T016BIT                           00000006
+T0CKI                             00000003
+T0CON                             00000FD5
+T0CS                              00000005
+T0IE                              00000005
+T0IF                              00000002
+T0IP                              00000002
+T0PS0                             00000000
+T0PS1                             00000001
+T0PS2                             00000002
+T0PS3                             00000003
+T0SE                              00000004
+T13CKI                            00000000
+T1CKPS0                           00000004
+T1CKPS1                           00000005
+T1CON                             00000FCD
+T1INSYNC                          00000002
+T1OSCEN                           00000003
+T1OSI                             00000001
+T1OSO                             00000000
+T1RUN                             00000006
+T1SYNC                            00000002
+T2CKPS0                           00000000
+T2CKPS1                           00000001
+T2CON                             00000FCA
+T2OUTPS0                          00000003
+T2OUTPS1                          00000004
+T2OUTPS2                          00000005
+T2OUTPS3                          00000006
+T5CKI                             00000003
+T5CON                             00000FB7
+T5MOD                             00000005
+T5PS0                             00000003
+T5PS1                             00000004
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 34
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+T5SEN                             00000007
+T5SYNC                            00000002
+TABLAT                            00000FF5
+TBIE                              00000004
+TBIF                              00000004
+TBIP                              00000004
+TBLPTR                            00000FF6
+TBLPTRH                           00000FF7
+TBLPTRL                           00000FF6
+TBLPTRU                           00000FF8
+TIMER0_COUNT                      00000020
+TIMER5_PRESCALE                   d'1'
+TMR0H                             00000FD7
+TMR0IE                            00000005
+TMR0IF                            00000002
+TMR0IP                            00000002
+TMR0L                             00000FD6
+TMR0ON                            00000007
+TMR1CS                            00000001
+TMR1H                             00000FCF
+TMR1IE                            00000000
+TMR1IF                            00000000
+TMR1IP                            00000000
+TMR1L                             00000FCE
+TMR1ON                            00000000
+TMR2                              00000FCC
+TMR2IE                            00000001
+TMR2IF                            00000001
+TMR2IP                            00000001
+TMR2ON                            00000002
+TMR5CS                            00000001
+TMR5H                             00000F88
+TMR5IE                            00000000
+TMR5IF                            00000000
+TMR5IP                            00000000
+TMR5L                             00000F87
+TMR5ON                            00000000
+TO                                00000003
+TOS                               00000FFD
+TOSH                              00000FFE
+TOSL                              00000FFD
+TOSU                              00000FFF
+TRISA                             00000F92
+TRISA0                            00000000
+TRISA1                            00000001
+TRISA2                            00000002
+TRISA3                            00000003
+TRISA4                            00000004
+TRISA6                            00000006
+TRISA7                            00000007
+TRISB                             00000F93
+TRISB0                            00000000
+TRISB1                            00000001
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 35
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+TRISB2                            00000002
+TRISB3                            00000003
+TRISB4                            00000004
+TRISB5                            00000005
+TRISB6                            00000006
+TRISB7                            00000007
+TRISC                             00000F94
+TRISC0                            00000000
+TRISC1                            00000001
+TRISC2                            00000002
+TRISC3                            00000003
+TRISC4                            00000004
+TRISC5                            00000005
+TRISC6                            00000006
+TRISC7                            00000007
+TRISC_VALUE                       b'00000111'
+TRMT                              00000001
+TUN0                              00000000
+TUN1                              00000001
+TUN2                              00000002
+TUN3                              00000003
+TUN4                              00000004
+TUN5                              00000005
+TX                                00000006
+TX9                               00000006
+TX9D                              00000000
+TXEN                              00000005
+TXIE                              00000004
+TXIF                              00000004
+TXIP                              00000004
+TXREG                             00000FAD
+TXSTA                             00000FAC
+UA                                00000001
+UDIS                              00000001
+UP                                00000005
+UPDATE_PWM                        000000E4
+UPDATE_SEQUENCE                   000000C2
+UP_DOWN                           00000005
+VALID_HALL                        7
+VCFG0                             00000006
+VCFG1                             00000007
+VELM                              00000007
+VELOCITY_PULSE_DECIMATION         d'1'
+VELOCITY_READY                    4
+VELRH                             00000F69
+VELRL                             00000F68
+VREFM                             00000002
+VREFP                             00000003
+W                                 00000000
+WAIT_HERE                         00000012
+WCOL                              00000007
+WDT0                              00000001
+WDT1                              00000002
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 36
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+WDT2                              00000003
+WDT3                              00000004
+WDT4                              00000005
+WDT5                              00000006
+WDT6                              00000007
+WDTCON                            00000FD1
+WDTW                              00000007
+WELCOME_MESSAGE                   00000000
+WR                                00000001
+WREG                              00000FE8
+WREN                              00000002
+WRERR                             00000003
+WUE                               00000001
+Z                                 00000002
+_BOREN_OFF_2L                     000000FD
+_BOREN_ON_2L                      000000FF
+_BORV_20_2L                       000000FF
+_BORV_27_2L                       000000FB
+_BORV_42_2L                       000000F7
+_BORV_45_2L                       000000F3
+_CONFIG1H                         00300001
+_CONFIG2H                         00300003
+_CONFIG2L                         00300002
+_CONFIG3H                         00300005
+_CONFIG3L                         00300004
+_CONFIG4L                         00300006
+_CONFIG5H                         00300009
+_CONFIG5L                         00300008
+_CONFIG6H                         0030000B
+_CONFIG6L                         0030000A
+_CONFIG7H                         0030000D
+_CONFIG7L                         0030000C
+_CP0_OFF_5L                       000000FF
+_CP0_ON_5L                        000000FE
+_CP1_OFF_5L                       000000FF
+_CP1_ON_5L                        000000FD
+_CP2_OFF_5L                       000000FF
+_CP2_ON_5L                        000000FB
+_CP3_OFF_5L                       000000FF
+_CP3_ON_5L                        000000F7
+_CPB_OFF_5H                       000000FF
+_CPB_ON_5H                        000000BF
+_CPD_OFF_5H                       000000FF
+_CPD_ON_5H                        0000007F
+_DEBUG_OFF_4L                     000000FF
+_DEBUG_ON_4L                      0000007F
+_DEVID1                           003FFFFE
+_DEVID2                           003FFFFF
+_EBTR0_OFF_7L                     000000FF
+_EBTR0_ON_7L                      000000FE
+_EBTR1_OFF_7L                     000000FF
+_EBTR1_ON_7L                      000000FD
+_EBTRB_OFF_7H                     000000FF
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 37
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_EBTRB_ON_7H                      000000BF
+_FCMEN_OFF_1H                     000000BF
+_FCMEN_ON_1H                      000000FF
+_HPOL_HIGH_3L                     000000FF
+_HPOL_LOW_3L                      000000EF
+_IDLOC0                           00200000
+_IDLOC1                           00200001
+_IDLOC2                           00200002
+_IDLOC3                           00200003
+_IDLOC4                           00200004
+_IDLOC5                           00200005
+_IDLOC6                           00200006
+_IDLOC7                           00200007
+_IESO_OFF_1H                      0000007F
+_IESO_ON_1H                       000000FF
+_LPOL_HIGH_3L                     000000FF
+_LPOL_LOW_3L                      000000F7
+_LVP_OFF_4L                       000000FB
+_LVP_ON_4L                        000000FF
+_MCLRE_OFF_3H                     0000007F
+_MCLRE_ON_3H                      000000FF
+_OSC_ECIO_1H                      000000F5
+_OSC_EC_1H                        000000F4
+_OSC_HSPLL_1H                     000000F6
+_OSC_HS_1H                        000000F2
+_OSC_IRCIO_1H                     000000F8
+_OSC_IRC_1H                       000000F9
+_OSC_LP_1H                        000000F0
+_OSC_RC1_1H                       000000FB
+_OSC_RC2_1H                       000000F3
+_OSC_RCIO_1H                      000000F7
+_OSC_RC_1H                        000000FF
+_OSC_XT_1H                        000000F1
+_PWMPIN_OFF_3L                    000000FF
+_PWMPIN_ON_3L                     000000FB
+_PWRTEN_OFF_2L                    000000FF
+_PWRTEN_ON_2L                     000000FE
+_STVREN_OFF_4L                    000000FE
+_STVREN_ON_4L                     000000FF
+_T1OSCMX_OFF_3L                   000000DF
+_T1OSCMX_ON_3L                    000000FF
+_WDPS_1024_2H                     000000F5
+_WDPS_128_2H                      000000EF
+_WDPS_16384_2H                    000000FD
+_WDPS_16_2H                       000000E9
+_WDPS_1_2H                        000000E1
+_WDPS_2048_2H                     000000F7
+_WDPS_256_2H                      000000F1
+_WDPS_2_2H                        000000E3
+_WDPS_32768_2H                    000000FF
+_WDPS_32_2H                       000000EB
+_WDPS_4096_2H                     000000F9
+_WDPS_4_2H                        000000E5
+MPASM  5.37                     HALL_OPEN.ASM   11-10-2010  10:53:20         PAGE 38
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_WDPS_512_2H                      000000F3
+_WDPS_64_2H                       000000ED
+_WDPS_8192_2H                     000000FB
+_WDPS_8_2H                        000000E7
+_WDTEN_OFF_2H                     000000FE
+_WDTEN_ON_2H                      000000FF
+_WINEN_OFF_2H                     000000FF
+_WINEN_ON_2H                      000000DF
+_WRT0_OFF_6L                      000000FF
+_WRT0_ON_6L                       000000FE
+_WRT1_OFF_6L                      000000FF
+_WRT1_ON_6L                       000000FD
+_WRTB_OFF_6H                      000000FF
+_WRTB_ON_6H                       000000BF
+_WRTC_OFF_6H                      000000FF
+_WRTC_ON_6H                       000000DF
+_WRTD_OFF_6H                      000000FF
+_WRTD_ON_6H                       0000007F
+__18F2431                         00000001
+dec_count                         0000033C
+dec_count1                        00000340
+
+Errors   :     0
+Warnings :     0 reported,     0 suppressed
+Messages :     0 reported,     0 suppressed
+
+

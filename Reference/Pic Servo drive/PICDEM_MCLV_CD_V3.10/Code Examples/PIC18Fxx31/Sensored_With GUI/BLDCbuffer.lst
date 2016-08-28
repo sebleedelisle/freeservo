@@ -1,0 +1,1862 @@
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE  1
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00001 ;**************************************************************************************
+                      00002 ;PROGRAM                :       BLDC OPEN LOOP SPEED CONTROL USING HALL SENSORS ON PICDEM MC LV BOARD
+                      00003 ;MICROCONTROLLER        :       PIC18FXX31
+                      00004 ;CRYSTAL FREQUENCY      :       5MHZ (X4 PLL)
+                      00005 ;**************************************************************************************
+                      00006 ;AUTHOR                 :       PADMARAJA YEDAMALE
+                      00007 ;                       :       RAKESH PAREKH
+                      00008 ;DATE                   :       01-APR-2005
+                      00009 ;VERSION                :       V1.0
+                      00010 ;**************************************************************************************
+                      00011 ;*
+                      00012 ;* Software License Agreement
+                      00013 ;*
+                      00014 ;* The software supplied herewith by Microchip Technology Incorporated
+                      00015 ;* (the “Company”) for its PICmicro® Microcontroller is intended and
+                      00016 ;* supplied to you, the Company’s customer, for use solely and
+                      00017 ;* exclusively on Microchip PICmicro Microcontroller products. The
+                      00018 ;* software is owned by the Company and/or its supplier, and is
+                      00019 ;* protected under applicable copyright laws. All rights are reserved.
+                      00020 ;* Any use in violation of the foregoing restrictions may subject the
+                      00021 ;* user to criminal sanctions under applicable laws, as well as to
+                      00022 ;* civil liability for the breach of the terms and conditions of this
+                      00023 ;* license.
+                      00024 ;*
+                      00025 ;* THIS SOFTWARE IS PROVIDED IN AN “AS IS” CONDITION. NO WARRANTIES,
+                      00026 ;* WHETHER EXPRESS, IMPLIED OR STATUTORY, INCLUDING, BUT NOT LIMITED
+                      00027 ;* TO, IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+                      00028 ;* PARTICULAR PURPOSE APPLY TO THIS SOFTWARE. THE COMPANY SHALL NOT,
+                      00029 ;* IN ANY CIRCUMSTANCES, BE LIABLE FOR SPECIAL, INCIDENTAL OR
+                      00030 ;* CONSEQUENTIAL DAMAGES, FOR ANY REASON WHATSOEVER.
+                      00031 
+                      00032 ;**************************************************************************************
+                      00033 ;THIS FILE CONTAINS ROUTINES FOR 4 FIFO. ROUTINES ARE AS GIVEN BELOW
+                      00034 ;WRITE TO TX_BUFFER, READ FROM RX_BUFFER
+                      00035 ;READ FROM HOST_BUFFER AND WRITE TO HOST_BUFFER
+                      00036 ;READ FROM RESPOSNE_BUFFER AND WRITE TO RESPONSE_BUFFER
+                      00037 ;FOR ADDITIONAL INFORMATION ON CREATING AND USING FIFO, VISIT MpAM (MAESTRO MODULE) SECTION
+                      00038 ;AT WWW.MICROCHIP.COM
+                      00039 ;**************************************************************************************
+                      00040 
+                      00041         INCLUDE <P18F2431.INC>
+                      00001         LIST
+                      00002 
+                      00003 ;==========================================================================
+                      00004 ;  MPASM PIC18F2431 processor include
+                      00005 ; 
+                      00006 ;  (c) Copyright 1999-2009 Microchip Technology, All rights reserved
+                      00007 ;==========================================================================
+                      00008 
+                      01340         LIST
+                      00042         INCLUDE <INTERFACEBLDCCONSTANT.INC>
+                      00001 ;GUI INTERFACE CODE CONSTANT AND BYTE DEFINITION
+                      00002 
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE  2
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00003 #DEFINE RAMP                    ;THIS DIRECTIVE ADDS ACCELERATION/DECELERATION ROUTINE IN FIRMWARE
+                      00004                                 ;COMMENT THIS DIRECTIVE IF ACCELERATION/DECELERATION NOT REQUIRED
+                      00005 #DEFINE ACTIVE_MODE     0x01    ;DEFINES ACTIVE CONTROL MODE
+                      00006                                 ;0X01 - GUI OR MANUAL MODE
+                      00007                                 ;0X02 - GUI MODE ONLY
+                      00008                                 ;0X03 - MANUAL MODE ONLY
+                      00009 ;****************************************************************************
+                      00010 ;MOTOR TYPE, CONTROL ALGORITHM, PIC SELECTION AND FIRMWARE VERSION CONTROL
+                      00011 ;****************************************************************************
+                      00012 #DEFINE MOTOR_TYPE_CONTROL  0X20        ;DEFINE MOTOR TYPE AND CONTROL ALOGRITHM TYPE
+                      00013 ;[Control Type]
+                      00014 ;0x00=Information Not Available
+                      00015 ;0x10=Brushless DC Motor - Open Loop Control on PICDEM MC
+                      00016 ;0x11=Brushless DC Motor - Close Loop Control on PICDEM MC
+                      00017 ;0x12=Brushless DC Motor - Open Loop Control on PICDEM MC with 3Ph Current Measurement
+                      00018 ;0x13=Brushless DC Motor - Close Loop Control on PICDEM MC with 3Ph Current Measurement
+                      00019 ;0x20=Brushless DC Motor - Open Loop Control on PICDEM MC LV
+                      00020 ;0x21=Brushless DC Motor - Close Loop Control on PICDEM MC LV
+                      00021 ;0x22=Brushless DC Motor - Sensorless Control on PICDEM MC LV
+                      00022 
+                      00023 
+                      00024 
+                      00025 #DEFINE PIC_TYPE        0X03            ;DEFINES CONTROLLER TYPE
+                      00026                                         ;0X02 - PIC18F2331
+                      00027                                         ;0X03 - PIC18F2431
+                      00028                                 
+                      00029 
+                      00030 #DEFINE FM_VER          0X11            ;DEFINES FIRMWARE VERSION
+                      00031                                         ;PRESENT FIRMWARE VER 1.1 = 0X11
+                      00032 #DEFINE OSC_VALUE_IN_MHZ    0X014       ;5      ;DEFINES OSCILLATOR FREQUENCY IN MHZ
+                      00033                                         ;DEFAULT 20MHz - 0X14
+                      00034 
+                      00035 ;#DEFINE SHUNT_MEASUREMENT               ;Define for DC Bus Current measurement
+                      00036                                         ;Comment for 3-Phase Current Measurement
+                      00037 ;****************************************************************************
+                      00038 ;BUFFER SIZE DEFINITION (DO NOT CHANGE)
+                      00039 ;****************************************************************************
+                      00040 #DEFINE UARTINT_RX_BUFFER_SIZE  0X20    ;RX BUFFER SIZE
+                      00041 #DEFINE UARTINT_TX_BUFFER_SIZE  0X20    ;TX BUFFER SIZE
+                      00042 #DEFINE HOST_BUFFER_SIZE    0X30        ;HOST BUFFER SIZE
+                      00043 #DEFINE RESPONSE_BUFFER_SIZE    0X20    ;RESPONSE BUFFER SIZE
+                      00044 #DEFINE PARAMETER_BUFFER_SIZE   0X35    ;SYSTEM PARAMETER BUFFER SIZE
+                      00045 
+                      00046 ;****************************************************************************
+                      00047 ;COMMUNICATION CONTROL CHARACTERS - BYTE SIZE (DO NOT CHANGE)
+                      00048 ;****************************************************************************
+                      00049 #DEFINE STX                 0X02
+                      00050 #DEFINE DLE                 0X04
+                      00051 #DEFINE ETX                 0X03
+                      00052 #DEFINE HOST_ACK            0X06
+                      00053 
+                      00054 ;****************************************************************************
+                      00055 ;SMHOSTFLAGS BIT DEFINITION
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE  3
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00056 ;****************************************************************************
+                      00057 #DEFINE SKIP_DLE            1
+                      00058 ;****************************************************************************
+                      00059 ;OTHER CONSTANTS
+                      00060 ;****************************************************************************
+                      00061 ;----------------------------------------------------------
+                      00062 ;#define BLDC_MOTOR_CONTROL_BOARD       ;uncomment if older version of the board is used
+                      00063 #define PICDEM_MC_LV                            ;uncomment if the release version of PICDEM LV is used.
+                      00064 ;----------------------------------------------------------
+                      00065 
+                      00066 #ifdef  PICDEM_MC_LV
+                      00067 #DEFINE LED1            0X05    ;RC0
+                      00068 #DEFINE LED2            0X04    ;RC2
+                      00069 #DEFINE LED3            0X03    ;RC3
+                      00070 #DEFINE SW3             0X00    ;RC4 - START/STOP SWITCH
+                      00071 #DEFINE SW2             0X02    ;RC5 - DIRECTION SWITCH
+                      00072 #endif
+                      00073 
+                      00074 #ifdef  BLDC_MOTOR_CONTROL_BOARD
+                      00075 #DEFINE LED1            0X00    ;RC0
+                      00076 #DEFINE LED2            0X02    ;RC2
+                      00077 #DEFINE LED3            0X03    ;RC3
+                      00078 #DEFINE SW3             0X04    ;RC4 - START/STOP SWITCH
+                      00079 #DEFINE SW2             0X05    ;RC5 - DIRECTION SWITCH
+                      00080 #endif
+                      00081 
+                      00082 #DEFINE TMR1L_COUNT     0XCB    ;COUNT IN TMR1 FOR 5msec INT
+                      00083 #DEFINE TMR1H_COUNT     0XF3    ;COUNT IN TMR1 FOR 5msec INT
+                      00084 #DEFINE MASKBYTE        0X07    ;FOR LED BLINK RATE
+                      00085 ;****************************************************************************
+                      00086 ;KEY (SWITCH) PIN DEFINITION (DO NOT CHANGE)
+                      00087 ;****************************************************************************
+                      00088 #ifdef  PICDEM_MC_LV
+                      00089 #DEFINE KEY_PORT        PORTC
+                      00090 #DEFINE RUN_STOP_KEY    0       ;NAME ON PICDEM LV MC BOARD - SW3
+                      00091 #DEFINE FWD_REV_KEY     2       ;NAME ON PICDEM LV MC BOARD - SW2
+                      00092 #define TRISC_VALUE     b'11000111'
+                      00093 #endif
+                      00094 #ifdef  BLDC_MOTOR_CONTROL_BOARD
+                      00095 #DEFINE KEY_PORT        PORTC
+                      00096 #DEFINE RUN_STOP_KEY    4       ;NAME ON PICDEM LV MC BOARD - SW3
+                      00097 #DEFINE FWD_REV_KEY     5       ;NAME ON PICDEM LV MC BOARD - SW2
+                      00098 #define TRISC_VALUE     b'11110010'
+                      00099 #endif
+                      00100 #DEFINE DEBOUNCE_COUNT  0XFF
+                      00101 ;****************************************************************************
+                      00102 ;GUI_FLAGS BIT DEFINITION (DO NOT CHANGE)
+                      00103 ;****************************************************************************
+                      00104 #DEFINE GUI_ON                  0   ;0 = GUI NOT ON, 1 = GUI ON
+                      00105 #DEFINE GUI_TIME_OUT            1   ;0 = NO TIME OUT YET, 1 = GUI TIME OUT
+                      00106 #DEFINE COM_IN_PROGRESS         2   ;0 = COMMUNICATION NOT IN PROGRESS, 1 = COMMUNICATION IN PROGRESS
+                      00107 #DEFINE COMMUNICATION_ERROR     3   ;0 = NO COMMUNICATION ERROR, 1 = COMMUNICATION ERROR
+                      00108 #DEFINE GUI_CONTROL_1ST_TIME    4   ;0 = NOT 1ST TIME, 1 = 1ST TIME
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE  4
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00109 
+                      00110 ;****************************************************************************
+                      00111 ;VUARTINTSTATUS BIT DEFINITION (DO NOT CHANGE)
+                      00112 ;****************************************************************************
+                      00113 #DEFINE UARTINT_TX_BUF_FUL  0   ;TX BUFFER FULL FLAG, 0 = NOT FULL, 1 = FULL
+                      00114 #DEFINE UARTINT_RX_BUF_FUL  1   ;RX BUFFER FULL FLAG, 0 = NOT FULL, 1 = FULL
+                      00115 #DEFINE UARTINT_RX_BUF_EMPTY    2   ;RX BUFFER EMPTY FLAG, 0 = NOT EMPTY, 1 = EMPTY
+                      00116 #DEFINE UARTINT_RX_ERROR    3   ;RX ERROR FLAG, 0 = NO ERROR, 1 = ERROR
+                      00117 #DEFINE UARTINT_RX_BUF_OF   4   ;RX BUFFER OVER FLOW FLAG, 0 = NO OVER FLOW, 1 = OVER FLOW
+                      00118 
+                      00119 ;****************************************************************************
+                      00120 ;VHOSTRESPONSEBUFSTATUS BIT DEFINITION (DO NOT CHANGE)
+                      00121 ;****************************************************************************
+                      00122 #DEFINE HOST_BUF_FUL        0   ;HOST BUFFER FULL FLAG, 0 = NOT FULL, 1 = FULL
+                      00123 #DEFINE HOST_BUF_EMPTY      1   ;HOST BUFFER EMPTY FLAG, 0 = NOT EMPTY, 1 = EMPTY
+                      00124 #DEFINE HOST_BUF_OF     2   ;HOST BUFFER OVER FLOW FLAG, 0 = NO OVER FLOW, 1 = OVER FLOW
+                      00125 #DEFINE RESPONSE_BUF_FUL    3   ;HOST BUFFER FULL FLAG, 0 = NOT FULL, 1 = FULL
+                      00126 #DEFINE RESPONSE_BUF_EMPTY  4   ;HOST BUFFER EMPTY FLAG, 0 = NOT EMPTY, 1 = EMPTY
+                      00127 #DEFINE RESPONSE_BUF_OF     5   ;HOST BUFFER OVER FLOW FLAG, 0 = NO OVER FLOW, 1 = OVER FLOW
+                      00128 
+                      00129 ;****************************************************************************
+                      00130 ;GPR DELAY PARAMETERS
+                      00131 ;****************************************************************************
+                      00132 #DEFINE DELAY_COUNT1        0XFF
+                      00133 #DEFINE DELAY_COUNT2        0XFF
+                      00134 #DEFINE CHANGE_OVER_DELAY   0X30    ;TOTAL DELAY ~ CHANGE_OVER_DELAY * 39MS
+                      00135 
+                      00136 ;****************************************************************************
+                      00137 ;CONSTANTS FOR FAULT CHECK AND DISPLAY
+                      00138 ;****************************************************************************
+                      00139 #DEFINE CYCLE_COUNT_MAX     0X13    ;SETS FAULT DISPLAY BLINK RATE
+                      00140 #DEFINE MAX_FAULT_CHECK_COUNT   0X09    ;SETS TIME WINDOW FOR FAULT CHECK
+                      00141 #DEFINE MAX_FLTA_COUNT      0X01    ;LIMIT COUNT FOR FLTA (OC) IN 1 TIME WINDOW
+                      00142 #DEFINE MAX_FLTB_COUNT      0X05    ;LIMIT COUNT FOR FLTB (OV) IN 1 TIME WINDOW
+                      00143 #DEFINE MAX_JUNCTION_TEMP   0X80    ;LIMIT COUNT FOR OT
+                      00144 #define MAX_TEMP_FILT_COUNT     D'50'    ;Filter Count for Temperature
+                      00145 
+                      00146 ;****************************************************************************
+                      00147 ;BLDC_FLAGS DEFINITION
+                      00148 ;****************************************************************************
+                      00149 #DEFINE HALL_FLAG       0
+                      00150 #DEFINE PARAM_DISPLAY       1
+                      00151 #DEFINE POSITION_BIT        2
+                      00152 #DEFINE VELOCITY_READY      3
+                      00153 #DEFINE NEGATIVE_ERROR      4
+                      00154 #DEFINE CALC_PWM        5
+                      00155 #DEFINE VALID_HALL      6
+                      00156 
+                      00157 ;****************************************************************************
+                      00158 ;BLDC_FLAGS_1 DEFINITION (DO NOT CHANGE)
+                      00159 ;****************************************************************************
+                      00160 #DEFINE FWD_REV         0
+                      00161 #DEFINE DEBOUNCE        1
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE  5
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00162 #DEFINE KEY_RS          2
+                      00163 #DEFINE KEY_FR          3
+                      00164 #DEFINE KEY_PRESSED     4
+                      00165 #DEFINE RUN_STOP        5
+                      00166 #DEFINE TMR1_OF         6
+                      00167 #DEFINE HW_CONTOL_1ST_TIME  7   ;0 = NOT 1ST TIME, 1 = 1ST TIME
+                      00168 
+                      00169 ;****************************************************************************
+                      00170 ;DEFINE POR DIRECTION
+                      00171 ;****************************************************************************
+                      00172 ;#DEFINE    DIRECTION_AT_POR    0   ;POR DIRECTION = REVERSE
+                      00173 #DEFINE DIRECTION_AT_POR    1   ;POR DIRECTION = FORWARD
+                      00174 
+                      00175 ;****************************************************************************
+                      00176 ;FLT_FLAGS DEFINITION (DO NOT CHANGE)
+                      00177 ;****************************************************************************
+                      00178 #DEFINE OCUR            0
+                      00179 #DEFINE OVOLT           1
+                      00180 #DEFINE OTEMP           2
+                      00181 
+                      00182 ;****************************************************************************
+                      00183 ;FLT_FLAGS_1 DEFINITION
+                      00184 ;****************************************************************************
+                      00185 #DEFINE FAULT           0
+                      00186 #DEFINE CLEAR_LED_ONCE  1
+                      00187 
+                      00188 ;****************************************************************************
+                      00189 ;BIT DEFINITION FOR SYSTEM PARAMETERS (DO NOT CHANGE)
+                      00190 ;****************************************************************************
+                      00191 #DEFINE HALL_ANGLE_BIT      3
+                      00192 #DEFINE PWM_ALIGNMENT       0
+                      00193 
+                      00194 ;****************************************************************************
+                      00195 ;LOCATION DETAILS FOR STORING SYSTEM PARAMETERS FROM GUI (DO NOT CHANGE)
+                      00196 ;****************************************************************************
+                      00197 #DEFINE LOC_BUFFER_CHKSUM_1         0X00
+                      00198 #DEFINE LOC_BUFFER_CHKSUM_2         0X01
+                      00199 #DEFINE LOC_MOTOR_VOLTAGE_LSB           0X02
+                      00200 #DEFINE LOC_MOTOR_CURRENT           0X03
+                      00201 #DEFINE LOC_MOTOR_FREQUENCY         0X04
+                      00202 #DEFINE LOC_MOTOR_SPEED_RPM_LSB         0X05
+                      00203 #DEFINE LOC_MOTOR_SPEED_RPM_MSB         0X06
+                      00204 #DEFINE LOC_MOTOR_POLE              0X07
+                      00205 #DEFINE LOC_FEEDBACK_DEVICE         0X08
+                      00206 #DEFINE LOC_ENCODER_PPR_LSB         0X09
+                      00207 #DEFINE LOC_ENCODER_PPR_MSB         0X0A
+                      00208 #DEFINE LOC_VOLTAGE_LIMIT_LSB           0X0B
+                      00209 #DEFINE LOC_LIMIT_CURRENT           0X0C
+                      00210 #DEFINE LOC_SPEED_LIMIT_LSB         0X0D
+                      00211 #DEFINE LOC_SPEED_LIMIT_MSB         0X0E
+                      00212 #DEFINE LOC_SPEED_LOOP_KP           0X0F
+                      00213 #DEFINE LOC_SPEED_LOOP_KI           0X10
+                      00214 #DEFINE LOC_SPEED_LOOP_KD           0X11
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE  6
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00215 #DEFINE LOC_CURRENT_LOOP_KP         0X12
+                      00216 #DEFINE LOC_CURRENT_LOOP_KI         0X13
+                      00217 #DEFINE LOC_CURRENT_LOOP_KD         0X14
+                      00218 #DEFINE LOC_ACCELERATION_RATE           0X15
+                      00219 #DEFINE LOC_DECELERATION_RATE           0X16
+                      00220 #DEFINE LOC_INPUT_VOLTAGE_LSB           0X17
+                      00221 #DEFINE LOC_PWM_TYPE_FREQ           0X18
+                      00222 #DEFINE LOC_MOTOR_SPEED_RPS         0X19
+                      00223 #DEFINE LOC_PWM_DC_MAX_LSB          0X1A
+                      00224 #DEFINE LOC_PWM_DC_MAX_MSB          0X1B
+                      00225 #DEFINE LOC_PTPER_LSB               0X1C
+                      00226 #DEFINE LOC_PTPER_MSB               0X1D
+                      00227 #DEFINE LOC_RPS_PWM_CONSTANT_LSB        0X1E
+                      00228 #DEFINE LOC_RPS_PWM_CONSTANT_MSB        0X1F
+                      00229 #DEFINE LOC_RPM_PWM_CONSTANT            0X20
+                      00230 #DEFINE LOC_ERROR_PWM_CONSTANT_LSB      0X21
+                      00231 #DEFINE LOC_ERROR_PWM_CONSTANT_MSB      0X22
+                      00232 #DEFINE LOC_ESTIMATE_TIMER_CONSTANT_LSB     0X23
+                      00233 #DEFINE LOC_ESTIMATE_TIMER_CONSTANT_MSB     0X24
+                      00234 #DEFINE LOC_RPM_CONSTANT_QEI_LSB        0X25
+                      00235 #DEFINE LOC_RPM_CONSTANT_QEI_MSB        0X26
+                      00236 #DEFINE LOC_RPM_CONSTANT_HALL_LSB       0X27
+                      00237 #DEFINE LOC_RPM_CONSTANT_HALL_MSB       0X28
+                      00238 #DEFINE LOC_V_MSB_TYPE              0X29
+                      00239 #DEFINE LOC_RESERVED_FOR_FUTURE_0       0X2A
+                      00240 #DEFINE LOC_RESERVED_FOR_FUTURE_1       0X2B
+                      00241 ;****************************************************************************
+                      00242 ;LOCATION DETAILS FOR STORING RUN TIME PARAMETERS (DO NOT CHANGE)
+                      00243 ;****************************************************************************
+                      00244 #DEFINE LOC_REQD_SPEED_RPM_LSB          0X2C
+                      00245 #DEFINE LOC_REQD_SPEED_RPM_MSB          0X2D
+                      00246 #DEFINE LOC_REQD_SPEED_RPS          0X2E
+                      00247 #DEFINE LOC_CAPBUF_CNT_LSB          0X2F
+                      00248 #DEFINE LOC_CAPBUF_CNT_MSB          0X30
+                      00249 #DEFINE LOC_FUTURE_USE_0            0X31
+                      00250 #DEFINE LOC_FUTURE_USE_1            0X32
+                      00251 #DEFINE LOC_FUTURE_USE_2            0X33
+                      00252 #DEFINE LOC_FUTURE_USE_3            0X34
+                      00253 
+                      00254 ;****************************************************************************
+                      00255 ;TOTAL SYSTEM PARAMETER COUNT (DO NOT CHANGE)
+                      00256 ;****************************************************************************
+                      00257 #DEFINE SYSTEM_PARAMETER_COUNT          0X2C
+                      00258 
+                      00259 ;****************************************************************************
+                      00260 ;GUI COMMAND DEFINITION (DO NOT CHANGE)
+                      00261 ;****************************************************************************
+                      00262 #DEFINE COMMAND_STOP                0X11
+                      00263 #DEFINE COMMAND_RUN             0X12
+                      00264 #DEFINE COMMAND_FREQ                0X13
+                      00265 #DEFINE COMMAND_DIRECTION           0X14
+                      00266 #DEFINE COMMAND_ASK_DATA            0X15
+                      00267 #DEFINE COMMAND_SYSTEM_PARAMETERS       0X16
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE  7
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00268 
+                      00269 ;****************************************************************************
+                      00270 ;COMMUTATION TABLE. LOADED TO OVDCOND
+                      00271 ;****************************************************************************
+                      00272 ; THE HALL SENSOR MAKES A TRANSITION EVERY 60 DEGREES
+                      00273 ; FOR OTHER TYPE OF MOTORS WITH DIFFERENT HALL SENSOR COMBINATION, THE TABLE HAS TO BE MODIFIED.
+                      00274 ;****************************************************************************
+                      00275 #DEFINE DUMMY_POSITION  B'00000000'
+                      00276 #DEFINE POSITION1       B'00010010'
+                      00277 #DEFINE POSITION2       B'00100100'
+                      00278 #DEFINE POSITION3       B'00000110'
+                      00279 #DEFINE POSITION4       B'00001001'
+                      00280 #DEFINE POSITION5       B'00011000'
+                      00281 #DEFINE POSITION6       B'00100001'
+                      00282 
+                      00043         INCLUDE <INTERFACEBLDCVAR.INC>
+                      00001 ;GUI INTERFACE CODE VARIABLE DEFINITION
+                      00002 
+                      00003 #IFDEF  INTERFACEBLDC
+                      00004         UDATA_ACS                       ;DO NOT DELETE ANY
+                      00005 ISR_WREG                RES     1       ;LOCATION FOR CONTEXT SAVING FOR LOW PRIORITY INT.
+                      00006 ISR_STATUS              RES     1       ;LOCATION FOR CONTEXT SAVING FOR LOW PRIORITY INT.
+                      00007 ISR_BSR                 RES     1       ;LOCATION FOR CONTEXT SAVING FOR LOW PRIORITY INT.
+                      00008 REQD_SPEED_REFH         RES     1       ;STORES POT SETTING FOR SPEED
+                      00009 REQD_SPEED_RPS          RES     1       ;STORES REQD SPEED INFO IN RPS
+                      00010 ACTUAL_SPEED_RPS        RES     1       ;STORES ACTUAL SPEED INFO IN RPS
+                      00011 TEMP_SPEED_RPS          RES     1       
+                      00012 RAMP_COUNT              RES     1       ;COUNTER FOR RAMP
+                      00013 BLDC_FLAGS              RES     1       
+                      00014 BLDC_FLAGS_1            RES     1
+                      00015 DEBOUNCE_COUNTER        RES     1
+                      00016 COUNTER                 RES     1       ;COUNTER FOR DELAY
+                      00017 COUNTER1                RES     1       ;COUNTER FOR DELAY
+                      00018 COUNTER2                RES     1       ;COUNTER FOR DELAY
+                      00019 POSITION_TABLE_FWD      RES     8       ;TABLE FOR STORING OUPUT PWM PATTERN AS PER HALL INPUT IN FWD DI
+                            R
+                      00020 POSITION_TABLE_REV      RES     8       ;TABLE FOR STORING OUPUT PWM PATTERN AS PER HALL INPUT IN REV DI
+                            R
+                      00021 CURRENT_UH              RES     1       ;STORS DC CURRENT OR R PHASE CURRENT
+                      00022 CURRENT_VH              RES     1       ;STORES Y PHASE CURRENT
+                      00023 CURRENT_WH              RES     1       ;STORES B PHASE CURRET
+                      00024 JUNCTION_TEMPH          RES     1       ;STORED INVERTER JUNCTION TEMPERATURE
+                      00025 PDC_TEMPH               RES     1
+                      00026 PDC_TEMPL               RES     1
+                      00027 CYCLE_COUNT             RES     1       ;STORES COUNT FOR FAULT DISPLAY RATE
+                      00028 FAULTA_COUNT            RES     1       ;COUNTER FOR ACTIVE FLTA IN FAULT CHECK TIME WINDOW
+                      00029 FAULTB_COUNT            RES     1       ;COUNTER FOR ACTIVE FLTB IN FAULT CHECK TIME WINDOW
+                      00030 FLT_FLAGS               RES     1       ;STORES INFO ABT ACTIVE FAULT
+                      00031 FLT_FLAGS_1             RES     1
+                      00032 FAULT_CHECK_COUNT       RES     1       ;COUNTER FOR DECIDING FAULT CHECK TIME WINDOW
+                      00033 
+                      00034 
+                      00035         UDATA           0X100           ;DO NOT DELETE ANY
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE  8
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00036 GUI_FLAGS               RES     1
+                      00037 ISR_FSR0L               RES     1       ;LOCATION FOR FSR0<H:L> SAVING IN INTERRUPT
+                      00038 ISR_FSR0H               RES     1
+                      00039 ISR_FSR1L               RES     1       ;LOCATION FOR FSR1<H:L> SAVING IN INTERRUPT
+                      00040 ISR_FSR1H               RES     1
+                      00041 LAST_ADC                RES     1       ;USED IN ISR_TMR1
+                      00042 TEMP_LAST_ADC           RES     1
+                      00043 TEMPHOSTDATALEN         RES     1
+                      00044 
+                      00045 #IF ((ACTIVE_MODE == 0X01) || (ACTIVE_MODE == 0X02))
+                      00046 UARTINT_STATUS          RES     1
+                      00047 UARTINT_TX_BUF_DATACNT  RES     1       ;TRANSMIT BUFFER DATA COUNT
+                      00048 UARTINT_TX_BUF_WRPTR    RES     1       ;TRANSMIT BUFFER WRITE POINTER
+                      00049 UARTINT_TX_BUF_RDPTR    RES     1       ;TRANSMIT BUFFER READ POINTER
+                      00050 UARTINT_RX_BUF_DATACNT  RES     1       ;RECEIVE BUFFER DATA COUNT
+                      00051 UARTINT_RX_BUF_WRPTR    RES     1       ;RECEIVE BUFFER WRITE POINTER
+                      00052 UARTINT_RX_BUF_RDPTR    RES     1       ;RECEIVE BUFFER READ POINTER
+                      00053 HOSTRESPONSE_BUF_STATUS RES     1
+                      00054 HOST_BUF_DATACNT        RES     1       ;HOST BUFFER DATA COUNT
+                      00055 HOST_BUF_WRPTR          RES     1       ;HOST BUFFER WRITE POINTER
+                      00056 HOST_BUF_RDPTR          RES     1       ;HOST BUFFER READ POINTER
+                      00057 RESPONSE_BUF_DATACNT    RES     1       ;RESPONSE BUFFER DATA COUNT
+                      00058 RESPONSE_BUF_WRPTR      RES     1       ;RESPONSE BUFFER WRITE POINTER
+                      00059 RESPONSE_BUF_RDPTR      RES     1       ;RESPONSE BUFFER READ POINTER
+                      00060 TEMP1                   RES     1       ;USED IN ISR_RX
+                      00061 TEMP2                   RES     1       ;USED IN PARSEHOSTCMD_EXECSTATE,SENDHOSTDATA_EXECSTATE
+                      00062 TEMP3                   RES     1       ;USED IN UARTINTGETCH,UARTINTPUTCH
+                      00063 TEMP4                   RES     1       ;USED IN HOSTBUFGETCH,HOSTBUFPUTCH
+                      00064 TEMP5                   RES     1       ;USED IN RESPONSEBUFGETCH,RESPONSEBUFPUTCH
+                      00065 TMR1_OF_COUNT_LSB       RES     1       ;COUNTER FOR DEFINING FW TIMEOUT
+                      00066 TMR1_OF_COUNT_MSB       RES     1       ;COUNTER FOR DEFINING FW TIMEOUT
+                      00067 RESPONSE                RES     1       ;COMMAND ID FROM FW TO GUI
+                      00068 RESPONSEDATALEN         RES     1       ;DATA BYTE LENGTH FROM FW TO GUI
+                      00069 RESPONSEDATA            RES     1       ;COPY OF RESPONSEDATALEN
+                      00070 ;****************************************************************************
+                      00071 ; HOST COMMAND PARSER FSM VARIABLES (DO NOT DELETE ANY)
+                      00072 ;****************************************************************************
+                      00073 SMHOST                  RES     1
+                      00074 SMHOSTFLAGS             RES     1
+                      00075 HOSTCHECKSUM            RES     1
+                      00076 USARTBYTE               RES     1
+                      00077 ;****************************************************************************
+                      00078 ; HOST COMMAND VARIABLES (DO NOT DELETE ANY)
+                      00079 ;****************************************************************************
+                      00080 HOSTCMD                 RES     1
+                      00081 HOSTDATALEN             RES     1
+                      00082 ;****************************************************************************
+                      00083 ;BUFFER RAM ALLOCATION (DO NOT CHANGE)
+                      00084 ;****************************************************************************
+                      00085 UARTINT_TX_BUFFER       RES     UARTINT_TX_BUFFER_SIZE  ;TRANSMIT DATA FIFO BUFFER
+                      00086 UARTINT_RX_BUFFER       RES     UARTINT_RX_BUFFER_SIZE  ;RECEIVE DATA FIFO BUFFER
+                      00087 HOST_BUFFER             RES     HOST_BUFFER_SIZE        ;RECEIVE DATA FIFO BUFFER
+                      00088 RESPONSE_BUFFER         RES     RESPONSE_BUFFER_SIZE    ;RECEIVE DATA FIFO BUFFER
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE  9
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00089 #ENDIF
+                      00090 PARAMETER_BUFFER        RES     PARAMETER_BUFFER_SIZE   ;PARAMETER BUFFER
+                      00091 
+                      00092 
+                      00093         GLOBAL  ISR_WREG,ISR_STATUS,ISR_BSR,REQD_SPEED_REFH,REQD_SPEED_RPS,ACTUAL_SPEED_RPS,TEMP_SPEED_R
+                            PS
+                      00094         GLOBAL  RAMP_COUNT,BLDC_FLAGS,BLDC_FLAGS_1,DEBOUNCE_COUNTER,COUNTER,COUNTER1,COUNTER2,POSITION_T
+                            ABLE_FWD
+                      00095         GLOBAL  POSITION_TABLE_REV,CURRENT_UH,CURRENT_VH,CURRENT_WH,JUNCTION_TEMPH,PDC_TEMPH,PDC_TEMPL,C
+                            YCLE_COUNT
+                      00096         GLOBAL  FAULTA_COUNT,FAULTB_COUNT,FLT_FLAGS,FLT_FLAGS_1,FAULT_CHECK_COUNT,GUI_FLAGS,ISR_FSR0L,IS
+                            R_FSR0H,ISR_FSR1L
+                      00097         GLOBAL  ISR_FSR1H,LAST_ADC,TEMP_LAST_ADC,TEMPHOSTDATALEN,PARAMETER_BUFFER
+                      00098 
+                      00099 #IF ((ACTIVE_MODE == 0X01) || (ACTIVE_MODE == 0X02))
+                      00100         GLOBAL  UARTINT_STATUS,UARTINT_TX_BUF_DATACNT,UARTINT_TX_BUF_WRPTR,UARTINT_TX_BUF_RDPTR,UARTINT_
+                            RX_BUF_DATACNT
+                      00101         GLOBAL  UARTINT_RX_BUF_WRPTR,UARTINT_RX_BUF_RDPTR,HOSTRESPONSE_BUF_STATUS,HOST_BUF_DATACNT,HOST_
+                            BUF_WRPTR
+                      00102         GLOBAL  HOST_BUF_RDPTR,RESPONSE_BUF_DATACNT,RESPONSE_BUF_WRPTR,RESPONSE_BUF_RDPTR,TEMP1,TEMP2,TE
+                            MP3,TEMP4,TEMP5
+                      00103         GLOBAL  TMR1_OF_COUNT_LSB,TMR1_OF_COUNT_MSB,RESPONSE,RESPONSEDATALEN,RESPONSEDATA,SMHOST,SMHOSTF
+                            LAGS
+                      00104         GLOBAL  HOSTCHECKSUM,USARTBYTE,HOSTCMD,HOSTDATALEN,UARTINT_TX_BUFFER,UARTINT_RX_BUFFER,HOST_BUFF
+                            ER,RESPONSE_BUFFER
+                      00105 #ENDIF
+                      00106 
+                      00107 #ELSE
+  0000                00108         EXTERN  ISR_WREG,ISR_STATUS,ISR_BSR,REQD_SPEED_REFH,REQD_SPEED_RPS,ACTUAL_SPEED_RPS,TEMP_SPEED_R
+                            PS
+  0000                00109         EXTERN  RAMP_COUNT,BLDC_FLAGS,BLDC_FLAGS_1,DEBOUNCE_COUNTER,COUNTER,COUNTER1,COUNTER2,POSITION_T
+                            ABLE_FWD
+  0000                00110         EXTERN  POSITION_TABLE_REV,CURRENT_UH,CURRENT_VH,CURRENT_WH,JUNCTION_TEMPH,PDC_TEMPH,PDC_TEMPL,C
+                            YCLE_COUNT
+  0000                00111         EXTERN  FAULTA_COUNT,FAULTB_COUNT,FLT_FLAGS,FLT_FLAGS_1,FAULT_CHECK_COUNT,GUI_FLAGS,ISR_FSR0L,IS
+                            R_FSR0H,ISR_FSR1L
+  0000                00112         EXTERN  ISR_FSR1H,LAST_ADC,TEMP_LAST_ADC,TEMPHOSTDATALEN,PARAMETER_BUFFER
+                      00113 
+                      00114 #IF ((ACTIVE_MODE == 0X01) || (ACTIVE_MODE == 0X02))
+  0000                00115         EXTERN  UARTINT_STATUS,UARTINT_TX_BUF_DATACNT,UARTINT_TX_BUF_WRPTR,UARTINT_TX_BUF_RDPTR,UARTINT_
+                            RX_BUF_DATACNT
+  0000                00116         EXTERN  UARTINT_RX_BUF_WRPTR,UARTINT_RX_BUF_RDPTR,HOSTRESPONSE_BUF_STATUS,HOST_BUF_DATACNT,HOST_
+                            BUF_WRPTR
+  0000                00117         EXTERN  HOST_BUF_RDPTR,RESPONSE_BUF_DATACNT,RESPONSE_BUF_WRPTR,RESPONSE_BUF_RDPTR,TEMP1,TEMP2,TE
+                            MP3,TEMP4,TEMP5
+  0000                00118         EXTERN  TMR1_OF_COUNT_LSB,TMR1_OF_COUNT_MSB,RESPONSE,RESPONSEDATALEN,RESPONSEDATA,SMHOST,SMHOSTF
+                            LAGS
+  0000                00119         EXTERN  HOSTCHECKSUM,USARTBYTE,HOSTCMD,HOSTDATALEN,UARTINT_TX_BUFFER,UARTINT_RX_BUFFER,HOST_BUFF
+                            ER,RESPONSE_BUFFER
+                      00120 #ENDIF
+                      00121 #ENDIF
+                      00044 
+                      00045 #IF ((ACTIVE_MODE == 0X01) || (ACTIVE_MODE == 0X02))    
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 10
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+  0000                00046         GLOBAL  HOSTBUF_GETCH,HOSTBUF_PUTCH,RESPONSEBUF_GETCH,RESPONSEBUF_PUTCH
+  0000                00047         GLOBAL  UARTINT_PUTCH,UARTINT_GETCH
+                      00048 
+                      00049 BUFFER  CODE
+                      00050 ;*************************************************************************************
+                      00051 ;READ HOST BUFFER ROUTINE
+                      00052 ;*************************************************************************************
+000000                00053 HOSTBUF_GETCH:
+000000 010?           00054         BANKSEL HOST_BUF_DATACNT
+000002 50??           00055         MOVF    HOST_BUF_DATACNT,W
+000004 E1??           00056         BNZ     TRANSFERRXDATA
+000006 82??           00057         BSF     HOSTRESPONSE_BUF_STATUS,HOST_BUF_EMPTY   ;SET HOST BUFFER EMPTY LAG
+000008 0C00           00058         RETLW   0
+00000A                00059 TRANSFERRXDATA
+00000A EE?? F0??      00060         LFSR    FSR2,HOST_BUFFER
+00000E 50??           00061         MOVF    HOST_BUF_RDPTR,W
+000010 CFDB F???      00062         MOVFF   PLUSW2,TEMP4
+000014 2A??           00063         INCF    HOST_BUF_RDPTR,F                        ;INCREMENT READ POINTER
+000016 0E30           00064         MOVLW   HOST_BUFFER_SIZE                        ;IF READ POINTER HAS REACHED THE MAXIMUM
+000018 18??           00065         XORWF   HOST_BUF_RDPTR,W                        ;VALUE THEN RESET IT FOR ROLL-OVER
+00001A B4D8           00066         BTFSC   STATUS,Z
+00001C 6A??           00067         CLRF    HOST_BUF_RDPTR
+00001E 06??           00068         DECF    HOST_BUF_DATACNT,F                      ;DECREMENT HOST_BUFFER DATA SIZE
+000020 90??           00069         BCF     HOSTRESPONSE_BUF_STATUS,HOST_BUF_FUL    ;IS READ SO BUFFER HAS SPACE
+000022 94??           00070         BCF     HOSTRESPONSE_BUF_STATUS,HOST_BUF_OF     ;FOR THE NEW DATA
+000024 50??           00071         MOVF    TEMP4,W                                 ;READ THE FIFO BUFFER DATA
+000026 0012           00072         RETURN
+                      00073 ;*************************************************************************************
+                      00074 ;WRITE HOST BUFFER ROUTINE
+                      00075 ;*************************************************************************************
+000028                00076 HOSTBUF_PUTCH:
+000028 010?           00077         BANKSEL HOSTRESPONSE_BUF_STATUS
+00002A 6E??           00078         MOVWF   TEMP4
+00002C B4??           00079         BTFSC   HOSTRESPONSE_BUF_STATUS,HOST_BUF_OF     ;CHECK FOR HOST_BUF_OF BIT
+00002E 0012           00080         RETURN
+000030 A0??           00081         BTFSS   HOSTRESPONSE_BUF_STATUS,HOST_BUF_FUL    ;CHECK FOR HOST_BUF_FUL BIT
+000032 D???           00082         BRA     APPENDHOSTBUFFER                        ;IF BUFFER FULL THEN SET HOST BUFFER
+000034 84??           00083         BSF     HOSTRESPONSE_BUF_STATUS,HOST_BUF_OF     ;OVER FLOW FLAG TO INDICATE THAT DATA IS MISSED.
+000036 0012           00084         RETURN
+000038                00085 APPENDHOSTBUFFER
+000038 EE?? F0??      00086         LFSR    FSR2, HOST_BUFFER
+00003C 92??           00087         BCF     HOSTRESPONSE_BUF_STATUS,HOST_BUF_EMPTY  ;INDICATE HOST BUF NOT EMPTY
+00003E 50??           00088         MOVF    HOST_BUF_WRPTR,W                        ;POINT TO PREVIOUS LOCATION
+000040 C??? FFDB      00089         MOVFF   TEMP4,PLUSW2                            ;COPY THE DATA INTO FIFO BUFFER
+000044 2A??           00090         INCF    HOST_BUF_WRPTR,F                        ;INCREMENT WRITE POINTER
+000046 0E30           00091         MOVLW   HOST_BUFFER_SIZE                        ;IF WRITE POINTER HAS REACHED THE MAXIMUM
+000048 18??           00092         XORWF   HOST_BUF_WRPTR,W                        ;VALUE THEN RESET IT FOR ROLL-OVER
+00004A B4D8           00093         BTFSC   STATUS,Z
+00004C 6A??           00094         CLRF    HOST_BUF_WRPTR
+00004E 2A??           00095         INCF    HOST_BUF_DATACNT,F                      ;DECREMENT UARTINT_RX_BUFFER DATA SIZE
+000050 0E30           00096         MOVLW   HOST_BUFFER_SIZE                        ;IF BUFFER HAS REACHED THE MAXIMUM
+000052 18??           00097         XORWF   HOST_BUF_DATACNT,W                      ;VALUE THEN SET THE FLAG FOR FULL
+000054 E0??           00098         BZ      FLAG_HOST_BUF_FULL
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 11
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000056 0012           00099         RETURN
+000058                00100 FLAG_HOST_BUF_FULL
+000058 80??           00101         BSF     HOSTRESPONSE_BUF_STATUS,HOST_BUF_FUL    ;SET FLAG TO INIDCATE HOST BUFFER FULL
+00005A 0012           00102         RETURN
+                      00103 ;*************************************************************************************
+                      00104 ;READ RESPONSE BUFFER ROUTINE
+                      00105 ;*************************************************************************************
+00005C                00106 RESPONSEBUF_GETCH:
+00005C 010?           00107         BANKSEL RESPONSE_BUF_DATACNT
+00005E 50??           00108         MOVF    RESPONSE_BUF_DATACNT,W
+000060 E1??           00109         BNZ     TRANSFERRESPONSEDATA
+000062 88??           00110         BSF     HOSTRESPONSE_BUF_STATUS,RESPONSE_BUF_EMPTY   ;SET RESPONSE BUFFER EMPTY LAG
+000064 0C00           00111         RETLW   0
+000066                00112 TRANSFERRESPONSEDATA
+000066 EE?? F0??      00113         LFSR    FSR2,RESPONSE_BUFFER
+00006A 50??           00114         MOVF    RESPONSE_BUF_RDPTR,W
+00006C CFDB F???      00115         MOVFF   PLUSW2,TEMP5
+000070 2A??           00116         INCF    RESPONSE_BUF_RDPTR,F                            ;INCREMENT READ POINTER
+000072 0E20           00117         MOVLW   RESPONSE_BUFFER_SIZE                            ;IF READ POINTER HAS REACHED THE MAXIMUM
+000074 18??           00118         XORWF   RESPONSE_BUF_RDPTR,W                            ;VALUE THEN RESET IT FOR ROLL-OVER
+000076 B4D8           00119         BTFSC   STATUS,Z
+000078 6A??           00120         CLRF    RESPONSE_BUF_RDPTR
+00007A 06??           00121         DECF    RESPONSE_BUF_DATACNT,F                          ;DECREMENT RESPOSNE_BUFFER DATA SIZE
+00007C 96??           00122         BCF     HOSTRESPONSE_BUF_STATUS,RESPONSE_BUF_FUL        ;IS READ SO BUFFER HAS SPACE
+00007E 9A??           00123         BCF     HOSTRESPONSE_BUF_STATUS,RESPONSE_BUF_OF         ;FOR THE NEW DATA
+000080 50??           00124         MOVF    TEMP5,W                                         ;READ THE FIFO BUFFER DATA
+000082 0012           00125         RETURN
+                      00126 ;*************************************************************************************
+                      00127 ;WRITE RESPONSE BUFFER ROUTINE
+                      00128 ;*************************************************************************************
+000084                00129 RESPONSEBUF_PUTCH:
+000084 010?           00130         BANKSEL HOSTRESPONSE_BUF_STATUS
+000086 6E??           00131         MOVWF   TEMP5
+000088 BA??           00132         BTFSC   HOSTRESPONSE_BUF_STATUS,RESPONSE_BUF_OF         ;CHECK FOR RESPOSNE_BUF_OF BIT
+00008A 0012           00133         RETURN
+00008C A6??           00134         BTFSS   HOSTRESPONSE_BUF_STATUS,RESPONSE_BUF_FUL        ;CHECK FOR RESPOSNE_BUF_FUL BIT
+00008E D???           00135         BRA     APPENDRESPONSEBUFFER                            ;IF BUFFER FULL THEN SET RESPOSNE BUFFER
+000090 8A??           00136         BSF     HOSTRESPONSE_BUF_STATUS,RESPONSE_BUF_OF         ;OVER FLOW FLAG TO INDICATE THAT
+000092 0012           00137         RETURN
+000094                00138 APPENDRESPONSEBUFFER
+000094 EE?? F0??      00139         LFSR    FSR2, RESPONSE_BUFFER
+000098 98??           00140         BCF     HOSTRESPONSE_BUF_STATUS,RESPONSE_BUF_EMPTY      ;INDICATE RESPOSNE BUF NOT EMPTY
+00009A 50??           00141         MOVF    RESPONSE_BUF_WRPTR,W                            ;POINT TO PREVIOUS LOCATION
+00009C C??? FFDB      00142         MOVFF   TEMP5,PLUSW2                                    ;COPY THE DATA INTO FIFO BUFFER
+0000A0 2A??           00143         INCF    RESPONSE_BUF_WRPTR,F                            ;INCREMENT WRITE POINTER
+0000A2 0E20           00144         MOVLW   RESPONSE_BUFFER_SIZE                            ;IF WRITE POINTER HAS REACHED THE MAXIMU
+                            M
+0000A4 18??           00145         XORWF   RESPONSE_BUF_WRPTR,W                            ;VALUE THEN RESET IT FOR ROLL-OVER
+0000A6 B4D8           00146         BTFSC   STATUS,Z
+0000A8 6A??           00147         CLRF    RESPONSE_BUF_WRPTR
+0000AA 2A??           00148         INCF    RESPONSE_BUF_DATACNT,F                          ;DECREMENT UARTINT_RX_BUFFER DATA SIZE
+0000AC 0E20           00149         MOVLW   RESPONSE_BUFFER_SIZE                            ;IF BUFFER HAS REACHED THE MAXIMUM
+0000AE 18??           00150         XORWF   RESPONSE_BUF_DATACNT,W                          ;VALUE THEN SET THE FLAG FOR FULL
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 12
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0000B0 E0??           00151         BZ      FLAG_RESPONSE_BUF_FULL
+0000B2 0012           00152         RETURN
+0000B4                00153 FLAG_RESPONSE_BUF_FULL
+0000B4 86??           00154         BSF     HOSTRESPONSE_BUF_STATUS,RESPONSE_BUF_FUL        ;SET FLAG TO INIDCATE RESPOSNE BUFFER FU
+                            LL
+0000B6 0012           00155         RETURN
+                      00156 ;****************************************************************************
+                      00157 ;WRITE TX BUFFER ROUTINE
+                      00158 ;****************************************************************************
+0000B8                00159 UARTINT_PUTCH:
+0000B8 989D           00160         BCF     PIE1,TXIE
+0000BA 010?           00161         BANKSEL TEMP3
+0000BC 6E??           00162         MOVWF   TEMP3                                           ;STORE VALUE IN TEMP. LOCATION
+0000BE B0??           00163         BTFSC   UARTINT_STATUS,UARTINT_TX_BUF_FUL               ;CHECK FOR UARTINT_TX_BUF_FUL BIT
+0000C0 0012           00164         RETURN                                                  ;IF BUFFER FULL THEN RETURN
+0000C2 50??           00165         MOVF    UARTINT_TX_BUF_DATACNT ,W                       ;IF UARTINT_TX_BUFFER IS EMPTY THEN TRAN
+                            SFER
+0000C4 E1??           00166         BNZ     APPENDTXBUFFER
+0000C6 C??? FFAD      00167         MOVFF   TEMP3,TXREG
+0000CA 2A??           00168         INCF    UARTINT_TX_BUF_RDPTR,F                          ;INCREMENT READ POINTER
+0000CC 0E20           00169         MOVLW   UARTINT_TX_BUFFER_SIZE                          ;IF READ POINTER HAS REACHED THE MAXIMUM
+0000CE 18??           00170         XORWF   UARTINT_TX_BUF_RDPTR,W                          ;VALUE THEN RESET IT FOR ROLL-OVER
+0000D0 B4D8           00171         BTFSC   STATUS,Z
+0000D2 6A??           00172         CLRF    UARTINT_TX_BUF_RDPTR
+0000D4                00173 APPENDTXBUFFER
+0000D4 EE?? F0??      00174         LFSR    FSR2, UARTINT_TX_BUFFER
+0000D8 50??           00175         MOVF    UARTINT_TX_BUF_WRPTR,W
+0000DA C??? FFDB      00176         MOVFF   TEMP3,PLUSW2
+0000DE 2A??           00177         INCF    UARTINT_TX_BUF_WRPTR,F                          ;INCREMENT WRITE POINTER
+0000E0 0E20           00178         MOVLW   UARTINT_TX_BUFFER_SIZE                          ;IF WRITE POINTER HAS REACHED THE MAXIMU
+                            M
+0000E2 18??           00179         XORWF   UARTINT_TX_BUF_WRPTR,W                          ;VALUE THEN RESET IT FOR ROLL-OVER
+0000E4 B4D8           00180         BTFSC   STATUS,Z
+0000E6 6A??           00181         CLRF    UARTINT_TX_BUF_WRPTR
+0000E8 2A??           00182         INCF    UARTINT_TX_BUF_DATACNT,F                        ;DECREMENT UARTINT_TX_BUFFER DATA SIZE
+0000EA 0E20           00183         MOVLW   UARTINT_TX_BUFFER_SIZE                          ;IF WRITE POINTER HAS REACHED THE MAXIMU
+                            M
+0000EC 18??           00184         XORWF   UARTINT_TX_BUF_DATACNT,W                        ;VALUE THEN RESET IT FOR ROLL-OVER
+0000EE A4D8           00185         BTFSS   STATUS,Z
+0000F0 D???           00186         BRA     TXBUFNOTFULL
+0000F2 80??           00187         BSF     UARTINT_STATUS,UARTINT_TX_BUF_FUL               ;IS BUFFER S FULL
+0000F4                00188 TXBUFNOTFULL    
+0000F4 889D           00189         BSF     PIE1,TXIE                                       ;ENABLE TX INTERRUPT
+0000F6 0012           00190         RETURN
+                      00191 ;****************************************************************************
+                      00192 ;READ RX BUFFER ROUTINE
+                      00193 ;****************************************************************************
+0000F8                00194 UARTINT_GETCH:
+0000F8 010?           00195         BANKSEL UARTINT_RX_BUF_DATACNT
+0000FA EE?? F0??      00196         LFSR    FSR2, UARTINT_RX_BUFFER
+0000FE 50??           00197         MOVF    UARTINT_RX_BUF_RDPTR,W
+000100 CFDB F???      00198         MOVFF   PLUSW2,TEMP3
+000104 2A??           00199         INCF    UARTINT_RX_BUF_RDPTR,F                          ;INCREMENT READ POINTER
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 13
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+000106 0E20           00200         MOVLW   UARTINT_RX_BUFFER_SIZE                          ;IF READ POINTER HAS REACHED THE MAXIMUM
+000108 18??           00201         XORWF   UARTINT_RX_BUF_RDPTR,W                          ;VALUE THEN RESET IT FOR ROLL-OVER
+00010A B4D8           00202         BTFSC   STATUS,Z
+00010C 6A??           00203         CLRF    UARTINT_RX_BUF_RDPTR
+00010E 4E??           00204         DCFSNZ  UARTINT_RX_BUF_DATACNT,F                        ;DECREMENT UARTINT_RX_BUFFER DATA SIZE
+000110 84??           00205         BSF     UARTINT_STATUS,UARTINT_RX_BUF_EMPTY             ;SET UARTINT_RX_BUF_EMPTY FLAG
+000112 92??           00206         BCF     UARTINT_STATUS,UARTINT_RX_BUF_FUL               ;IS READ SO BUFFER HAS SPACE
+000114 98??           00207         BCF     UARTINT_STATUS,UARTINT_RX_BUF_OF                ;FOR THE NEW DATA
+000116 50??           00208         MOVF    TEMP3,W                                         ;READ THE FIFO BUFFER DATA
+000118 0012           00209         RETURN
+                      00210 #ENDIF
+                      00211 ;*************************************************************************************
+                      00212 ;END OF FILE
+                      00213 ;*************************************************************************************
+                      00214         END
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 14
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+A                                 00000000
+ABDEN                             00000000
+ACCESS                            00000000
+ACMOD0                            00000002
+ACMOD1                            00000003
+ACONV                             00000005
+ACQT0                             00000003
+ACQT1                             00000004
+ACQT2                             00000005
+ACQT3                             00000006
+ACSCH                             00000004
+ACTIVE_MODE                       0x01
+ACTUAL_SPEED_RPS                  00000000
+ADCHS                             00000F99
+ADCON0                            00000FC2
+ADCON1                            00000FC1
+ADCON2                            00000FC0
+ADCON3                            00000F9A
+ADCS0                             00000000
+ADCS1                             00000001
+ADCS2                             00000002
+ADEN                              00000003
+ADFM                              00000007
+ADIE                              00000006
+ADIF                              00000006
+ADIP                              00000006
+ADON                              00000000
+ADPNT0                            00000000
+ADPNT1                            00000001
+ADRES                             00000FC3
+ADRESH                            00000FC4
+ADRESL                            00000FC3
+ADRS0                             00000006
+ADRS1                             00000007
+AN0                               00000000
+AN1                               00000001
+AN2                               00000002
+AN3                               00000003
+AN4                               00000005
+ANS0                              00000000
+ANS1                              00000001
+ANS2                              00000002
+ANS3                              00000003
+ANS4                              00000004
+ANSEL0                            00000FB8
+APPENDHOSTBUFFER                  00000038
+APPENDRESPONSEBUFFER              00000094
+APPENDTXBUFFER                    000000D4
+BANKED                            00000001
+BAUDCON                           00000FAA
+BAUDCTL                           00000FAA
+BF                                00000000
+BFEMT                             00000003
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 15
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+BFOVFL                            00000002
+BLDC_FLAGS                        00000000
+BLDC_FLAGS_1                      00000000
+BOR                               00000000
+BRFEN                             00000007
+BRG16                             00000003
+BRGH                              00000002
+BSR                               00000FE0
+C                                 00000000
+CALC_PWM                          5
+CAP1BUFH                          00000F69
+CAP1BUFL                          00000F68
+CAP1CON                           00000F63
+CAP1M0                            00000000
+CAP1M1                            00000001
+CAP1M2                            00000002
+CAP1M3                            00000003
+CAP1REN                           00000006
+CAP1TMR                           00000005
+CAP2BUFH                          00000F67
+CAP2BUFL                          00000F66
+CAP2CON                           00000F62
+CAP2M0                            00000000
+CAP2M1                            00000001
+CAP2M2                            00000002
+CAP2M3                            00000003
+CAP2REN                           00000006
+CAP2TMR                           00000005
+CAP3BUFH                          00000F65
+CAP3BUFL                          00000F64
+CAP3CON                           00000F61
+CAP3M0                            00000000
+CAP3M1                            00000001
+CAP3M2                            00000002
+CAP3M3                            00000003
+CAP3REN                           00000006
+CAP3TMR                           00000005
+CCP1                              00000002
+CCP1CON                           00000FBD
+CCP1IE                            00000002
+CCP1IF                            00000002
+CCP1IP                            00000002
+CCP1M0                            00000000
+CCP1M1                            00000001
+CCP1M2                            00000002
+CCP1M3                            00000003
+CCP1X                             00000005
+CCP1Y                             00000004
+CCP2                              00000001
+CCP2CON                           00000FBA
+CCP2IE                            00000000
+CCP2IF                            00000000
+CCP2IP                            00000000
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 16
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+CCP2M0                            00000000
+CCP2M1                            00000001
+CCP2M2                            00000002
+CCP2M3                            00000003
+CCP2X                             00000005
+CCP2Y                             00000004
+CCPR1                             00000FBE
+CCPR1H                            00000FBF
+CCPR1L                            00000FBE
+CCPR2                             00000FBB
+CCPR2H                            00000FBC
+CCPR2L                            00000FBB
+CFGS                              00000006
+CHANGE_OVER_DELAY                 0X30
+CK                                00000006
+CKE                               00000006
+CKP                               00000004
+CLEAR_LED_ONCE                    1
+CLKO                              00000006
+COMMAND_ASK_DATA                  0X15
+COMMAND_DIRECTION                 0X14
+COMMAND_FREQ                      0X13
+COMMAND_RUN                       0X12
+COMMAND_STOP                      0X11
+COMMAND_SYSTEM_PARAMETERS         0X16
+COMMUNICATION_ERROR               3
+COM_IN_PROGRESS                   2
+COUNTER                           00000000
+COUNTER1                          00000000
+COUNTER2                          00000000
+CREN                              00000004
+CSRC                              00000007
+CURRENT_UH                        00000000
+CURRENT_VH                        00000000
+CURRENT_WH                        00000000
+CYCLE_COUNT                       00000000
+CYCLE_COUNT_MAX                   0X13
+D                                 00000005
+DATA_ADDRESS                      00000005
+DC                                00000001
+DC1B0                             00000004
+DC1B1                             00000005
+DC2B0                             00000004
+DC2B1                             00000005
+DDRA                              TRISA
+DDRB                              TRISB
+DDRC                              TRISC
+DDRD                              TRISD
+DDRE                              TRISE
+DEBOUNCE                          1
+DEBOUNCE_COUNT                    0XFF
+DEBOUNCE_COUNTER                  00000000
+DELAY_COUNT1                      0XFF
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 17
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+DELAY_COUNT2                      0XFF
+DFLTCON                           00000F60
+DIRECTION_AT_POR                  1
+DLE                               0X04
+DONE                              00000001
+DOWN                              00000005
+DT0                               00000000
+DT1                               00000001
+DT2                               00000002
+DT3                               00000003
+DT4                               00000004
+DT5                               00000005
+DTA0                              00000000
+DTA1                              00000001
+DTA2                              00000002
+DTA3                              00000003
+DTA4                              00000004
+DTA5                              00000005
+DTAPS0                            00000006
+DTAPS1                            00000007
+DTCON                             00000F6D
+DTPS0                             00000006
+DTPS1                             00000007
+DUMMY_POSITION                    B'00000000'
+D_A                               00000005
+EEADR                             00000FA9
+EECON1                            00000FA6
+EECON2                            00000FA7
+EEDATA                            00000FA8
+EEIE                              00000004
+EEIF                              00000004
+EEIP                              00000004
+EEPGD                             00000007
+ETX                               0X03
+FAST                              00000001
+FAULT                             0
+FAULTA_COUNT                      00000000
+FAULTB_COUNT                      00000000
+FAULT_CHECK_COUNT                 00000000
+FERR                              00000002
+FFOVFL                            00000002
+FIFOEN                            00000004
+FLAG_HOST_BUF_FULL                00000058
+FLAG_RESPONSE_BUF_FULL            000000B4
+FLT1EN                            00000003
+FLT2EN                            00000004
+FLT3EN                            00000005
+FLT4EN                            00000006
+FLTA                              00000001
+FLTAEN                            00000000
+FLTAMOD                           00000001
+FLTAS                             00000002
+FLTB                              00000002
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 18
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+FLTBEN                            00000004
+FLTBMOD                           00000005
+FLTBS                             00000006
+FLTCK0                            00000000
+FLTCK1                            00000001
+FLTCK2                            00000002
+FLTCON                            00000003
+FLTCONFIG                         00000F6C
+FLTS                              00000002
+FLT_FLAGS                         00000000
+FLT_FLAGS_1                       00000000
+FM_VER                            0X11
+FREE                              00000004
+FSR0                              00000000
+FSR0H                             00000FEA
+FSR0L                             00000FE9
+FSR1                              00000001
+FSR1H                             00000FE2
+FSR1L                             00000FE1
+FSR2                              00000002
+FSR2H                             00000FDA
+FSR2L                             00000FD9
+FWD_REV                           0
+FWD_REV_KEY                       2
+GASEL0                            00000000
+GASEL1                            00000001
+GBSEL0                            00000004
+GBSEL1                            00000005
+GCSEL0                            00000002
+GCSEL1                            00000003
+GDSEL0                            00000006
+GDSEL1                            00000007
+GIE                               00000007
+GIEH                              00000007
+GIEL                              00000006
+GO                                00000001
+GO_DONE                           00000001
+GUI_CONTROL_1ST_TIME              4
+GUI_FLAGS                         00000000
+GUI_ON                            0
+GUI_TIME_OUT                      1
+HALL_ANGLE_BIT                    3
+HALL_FLAG                         0
+HOSTBUF_GETCH                     00000000
+HOSTBUF_PUTCH                     00000028
+HOSTCHECKSUM                      00000000
+HOSTCMD                           00000000
+HOSTDATALEN                       00000000
+HOSTRESPONSE_BUF_STATUS           00000000
+HOST_ACK                          0X06
+HOST_BUFFER                       00000000
+HOST_BUFFER_SIZE                  0X30
+HOST_BUF_DATACNT                  00000000
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 19
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+HOST_BUF_EMPTY                    1
+HOST_BUF_FUL                      0
+HOST_BUF_OF                       2
+HOST_BUF_RDPTR                    00000000
+HOST_BUF_WRPTR                    00000000
+HW_CONTOL_1ST_TIME                7
+IC1IE                             00000001
+IC1IF                             00000001
+IC1IP                             00000001
+IC2QEIE                           00000002
+IC2QEIF                           00000002
+IC2QEIP                           00000002
+IC3DRIE                           00000003
+IC3DRIF                           00000003
+IC3DRIP                           00000003
+IDLEN                             00000007
+INDF0                             00000FEF
+INDF1                             00000FE7
+INDF2                             00000FDF
+INT0                              00000003
+INT0E                             00000004
+INT0F                             00000001
+INT0IE                            00000004
+INT0IF                            00000001
+INT1                              00000004
+INT1E                             00000003
+INT1F                             00000000
+INT1IE                            00000003
+INT1IF                            00000000
+INT1IP                            00000006
+INT1P                             00000006
+INT2                              00000005
+INT2E                             00000004
+INT2F                             00000001
+INT2IE                            00000004
+INT2IF                            00000001
+INT2IP                            00000007
+INT2P                             00000007
+INTCON                            00000FF2
+INTCON2                           00000FF1
+INTCON3                           00000FF0
+INTEDG0                           00000006
+INTEDG1                           00000005
+INTEDG2                           00000004
+IOFS                              00000002
+IPEN                              00000007
+IPR1                              00000F9F
+IPR2                              00000FA2
+IPR3                              00000FA5
+IRCF0                             00000004
+IRCF1                             00000005
+IRCF2                             00000006
+IRVST                             00000005
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 20
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+ISR_BSR                           00000000
+ISR_FSR0H                         00000000
+ISR_FSR0L                         00000000
+ISR_FSR1H                         00000000
+ISR_FSR1L                         00000000
+ISR_STATUS                        00000000
+ISR_WREG                          00000000
+IVRST                             00000005
+JUNCTION_TEMPH                    00000000
+KEY_FR                            3
+KEY_PORT                          PORTC
+KEY_PRESSED                       4
+KEY_RS                            2
+LAST_ADC                          00000000
+LATA                              00000F89
+LATA0                             00000000
+LATA1                             00000001
+LATA2                             00000002
+LATA3                             00000003
+LATA4                             00000004
+LATA6                             00000006
+LATA7                             00000007
+LATB                              00000F8A
+LATB0                             00000000
+LATB1                             00000001
+LATB2                             00000002
+LATB3                             00000003
+LATB4                             00000004
+LATB5                             00000005
+LATB6                             00000006
+LATB7                             00000007
+LATC                              00000F8B
+LATC0                             00000000
+LATC1                             00000001
+LATC2                             00000002
+LATC3                             00000003
+LATC4                             00000004
+LATC5                             00000005
+LATC6                             00000006
+LATC7                             00000007
+LED1                              0X05
+LED2                              0X04
+LED3                              0X03
+LOC_ACCELERATION_RATE             0X15
+LOC_BUFFER_CHKSUM_1               0X00
+LOC_BUFFER_CHKSUM_2               0X01
+LOC_CAPBUF_CNT_LSB                0X2F
+LOC_CAPBUF_CNT_MSB                0X30
+LOC_CURRENT_LOOP_KD               0X14
+LOC_CURRENT_LOOP_KI               0X13
+LOC_CURRENT_LOOP_KP               0X12
+LOC_DECELERATION_RATE             0X16
+LOC_ENCODER_PPR_LSB               0X09
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 21
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+LOC_ENCODER_PPR_MSB               0X0A
+LOC_ERROR_PWM_CONSTANT_LSB        0X21
+LOC_ERROR_PWM_CONSTANT_MSB        0X22
+LOC_ESTIMATE_TIMER_CONSTANT_LSB   0X23
+LOC_ESTIMATE_TIMER_CONSTANT_MSB   0X24
+LOC_FEEDBACK_DEVICE               0X08
+LOC_FUTURE_USE_0                  0X31
+LOC_FUTURE_USE_1                  0X32
+LOC_FUTURE_USE_2                  0X33
+LOC_FUTURE_USE_3                  0X34
+LOC_INPUT_VOLTAGE_LSB             0X17
+LOC_LIMIT_CURRENT                 0X0C
+LOC_MOTOR_CURRENT                 0X03
+LOC_MOTOR_FREQUENCY               0X04
+LOC_MOTOR_POLE                    0X07
+LOC_MOTOR_SPEED_RPM_LSB           0X05
+LOC_MOTOR_SPEED_RPM_MSB           0X06
+LOC_MOTOR_SPEED_RPS               0X19
+LOC_MOTOR_VOLTAGE_LSB             0X02
+LOC_PTPER_LSB                     0X1C
+LOC_PTPER_MSB                     0X1D
+LOC_PWM_DC_MAX_LSB                0X1A
+LOC_PWM_DC_MAX_MSB                0X1B
+LOC_PWM_TYPE_FREQ                 0X18
+LOC_REQD_SPEED_RPM_LSB            0X2C
+LOC_REQD_SPEED_RPM_MSB            0X2D
+LOC_REQD_SPEED_RPS                0X2E
+LOC_RESERVED_FOR_FUTURE_0         0X2A
+LOC_RESERVED_FOR_FUTURE_1         0X2B
+LOC_RPM_CONSTANT_HALL_LSB         0X27
+LOC_RPM_CONSTANT_HALL_MSB         0X28
+LOC_RPM_CONSTANT_QEI_LSB          0X25
+LOC_RPM_CONSTANT_QEI_MSB          0X26
+LOC_RPM_PWM_CONSTANT              0X20
+LOC_RPS_PWM_CONSTANT_LSB          0X1E
+LOC_RPS_PWM_CONSTANT_MSB          0X1F
+LOC_SPEED_LIMIT_LSB               0X0D
+LOC_SPEED_LIMIT_MSB               0X0E
+LOC_SPEED_LOOP_KD                 0X11
+LOC_SPEED_LOOP_KI                 0X10
+LOC_SPEED_LOOP_KP                 0X0F
+LOC_VOLTAGE_LIMIT_LSB             0X0B
+LOC_V_MSB_TYPE                    0X29
+LVDCON                            00000FD2
+LVDEN                             00000004
+LVDIE                             00000002
+LVDIF                             00000002
+LVDIP                             00000002
+LVDL0                             00000000
+LVDL1                             00000001
+LVDL2                             00000002
+LVDL3                             00000003
+MASKBYTE                          0X07
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 22
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+MAXCNTH                           00000F65
+MAXCNTL                           00000F64
+MAX_FAULT_CHECK_COUNT             0X09
+MAX_FLTA_COUNT                    0X01
+MAX_FLTB_COUNT                    0X05
+MAX_JUNCTION_TEMP                 0X80
+MAX_TEMP_FILT_COUNT               D'50'
+MOTOR_TYPE_CONTROL                0X20
+N                                 00000004
+NEGATIVE_ERROR                    4
+NOT_A                             00000005
+NOT_ADDRESS                       00000005
+NOT_BOR                           00000000
+NOT_DONE                          00000001
+NOT_DOWN                          00000005
+NOT_FLTA                          00000001
+NOT_FLTB                          00000002
+NOT_IPEN                          00000007
+NOT_PD                            00000002
+NOT_POR                           00000001
+NOT_RBPU                          00000007
+NOT_RESEN                         00000006
+NOT_RI                            00000004
+NOT_SS                            00000006
+NOT_T1SYNC                        00000002
+NOT_T5SYNC                        00000002
+NOT_TO                            00000003
+NOT_VELM                          00000007
+NOT_W                             00000002
+NOT_WRITE                         00000002
+OCUR                              0
+OERR                              00000001
+OSC2                              00000006
+OSCCON                            00000FD3
+OSCTUNE                           00000F9B
+OSC_VALUE_IN_MHZ                  0X014
+OSFIE                             00000007
+OSFIF                             00000007
+OSFIP                             00000007
+OSTS                              00000003
+OSYNC                             00000000
+OTEMP                             2
+OV                                00000003
+OVDCOND                           00000F6B
+OVDCONS                           00000F6A
+OVOLT                             1
+P                                 00000004
+PARAMETER_BUFFER                  00000000
+PARAMETER_BUFFER_SIZE             0X35
+PARAM_DISPLAY                     1
+PC                                00000FF9
+PCL                               00000FF9
+PCLATH                            00000FFA
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 23
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+PCLATU                            00000FFB
+PD                                00000002
+PDC0H                             00000F78
+PDC0L                             00000F79
+PDC1H                             00000F76
+PDC1L                             00000F77
+PDC2H                             00000F74
+PDC2L                             00000F75
+PDC_TEMPH                         00000000
+PDC_TEMPL                         00000000
+PDEC0                             00000000
+PDEC1                             00000001
+PEIE                              00000006
+PICDEM_MC_LV                      
+PIC_TYPE                          0X03
+PIE1                              00000F9D
+PIE2                              00000FA0
+PIE3                              00000FA3
+PIR1                              00000F9E
+PIR2                              00000FA1
+PIR3                              00000FA4
+PLUSW0                            00000FEB
+PLUSW1                            00000FE3
+PLUSW2                            00000FDB
+PMOD0                             00000000
+PMOD1                             00000001
+PMOD2                             00000002
+PMOD3                             00000003
+POR                               00000001
+PORTA                             00000F80
+PORTB                             00000F81
+PORTC                             00000F82
+PORTE                             00000F84
+POSCNTH                           00000F67
+POSCNTL                           00000F66
+POSITION1                         B'00010010'
+POSITION2                         B'00100100'
+POSITION3                         B'00000110'
+POSITION4                         B'00001001'
+POSITION5                         B'00011000'
+POSITION6                         B'00100001'
+POSITION_BIT                      2
+POSITION_TABLE_FWD                00000000
+POSITION_TABLE_REV                00000000
+POSTDEC0                          00000FED
+POSTDEC1                          00000FE5
+POSTDEC2                          00000FDD
+POSTINC0                          00000FEE
+POSTINC1                          00000FE6
+POSTINC2                          00000FDE
+POUT0                             00000000
+POUT1                             00000001
+POUT2                             00000002
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 24
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+POUT3                             00000003
+POUT4                             00000004
+POUT5                             00000005
+POUT6                             00000006
+POUT7                             00000007
+POVD0                             00000000
+POVD1                             00000001
+POVD2                             00000002
+POVD3                             00000003
+POVD4                             00000004
+POVD5                             00000005
+POVD6                             00000006
+POVD7                             00000007
+PR2                               00000FCB
+PR5H                              00000F91
+PR5L                              00000F90
+PREINC0                           00000FEC
+PREINC1                           00000FE4
+PREINC2                           00000FDC
+PROD                              00000FF3
+PRODH                             00000FF4
+PRODL                             00000FF3
+PSA                               00000003
+PTCKPS0                           00000002
+PTCKPS1                           00000003
+PTCON0                            00000F7F
+PTCON1                            00000F7E
+PTDIR                             00000006
+PTEN                              00000007
+PTIE                              00000004
+PTIF                              00000004
+PTIP                              00000004
+PTMOD0                            00000000
+PTMOD1                            00000001
+PTMRH                             00000F7C
+PTMRL                             00000F7D
+PTOPS0                            00000004
+PTOPS1                            00000005
+PTOPS2                            00000006
+PTOPS3                            00000007
+PTPERH                            00000F7A
+PTPERL                            00000F7B
+PWMCON0                           00000F6F
+PWMCON1                           00000F6E
+PWMEN0                            00000004
+PWMEN1                            00000005
+PWMEN2                            00000006
+PWM_ALIGNMENT                     0
+QEICON                            00000FB6
+QEIM0                             00000002
+QEIM1                             00000003
+QEIM2                             00000004
+R                                 00000002
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 25
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+RA0                               00000000
+RA1                               00000001
+RA2                               00000002
+RA3                               00000003
+RA4                               00000004
+RA6                               00000006
+RA7                               00000007
+RAMP                              
+RAMP_COUNT                        00000000
+RB0                               00000000
+RB1                               00000001
+RB2                               00000002
+RB3                               00000003
+RB4                               00000004
+RB5                               00000005
+RB6                               00000006
+RB7                               00000007
+RBIE                              00000003
+RBIF                              00000000
+RBIP                              00000000
+RBPU                              00000007
+RC0                               00000000
+RC1                               00000001
+RC2                               00000002
+RC3                               00000003
+RC4                               00000004
+RC5                               00000005
+RC6                               00000006
+RC7                               00000007
+RCIDL                             00000006
+RCIE                              00000005
+RCIF                              00000005
+RCIP                              00000005
+RCON                              00000FD0
+RCREG                             00000FAE
+RCSTA                             00000FAB
+RD                                00000000
+RD16                              00000007
+RE3                               00000003
+READ_WRITE                        00000002
+REQD_SPEED_REFH                   00000000
+REQD_SPEED_RPS                    00000000
+RESEN                             00000006
+RESPONSE                          00000000
+RESPONSEBUF_GETCH                 0000005C
+RESPONSEBUF_PUTCH                 00000084
+RESPONSEDATA                      00000000
+RESPONSEDATALEN                   00000000
+RESPONSE_BUFFER                   00000000
+RESPONSE_BUFFER_SIZE              0X20
+RESPONSE_BUF_DATACNT              00000000
+RESPONSE_BUF_EMPTY                4
+RESPONSE_BUF_FUL                  3
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 26
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+RESPONSE_BUF_OF                   5
+RESPONSE_BUF_RDPTR                00000000
+RESPONSE_BUF_WRPTR                00000000
+RI                                00000004
+RUN_STOP                          5
+RUN_STOP_KEY                      0
+RX                                00000007
+RX9                               00000006
+RX9D                              00000000
+R_W                               00000002
+S                                 00000003
+SASEL0                            00000000
+SASEL1                            00000001
+SBSEL0                            00000004
+SBSEL1                            00000005
+SCK                               00000005
+SCKP                              00000004
+SCL                               00000005
+SCS0                              00000000
+SCS1                              00000001
+SCSEL0                            00000002
+SCSEL1                            00000003
+SDA                               00000004
+SDI                               00000004
+SDO                               00000007
+SDSEL0                            00000006
+SDSEL1                            00000007
+SENDB                             00000003
+SEVOPS0                           00000004
+SEVOPS1                           00000005
+SEVOPS2                           00000006
+SEVOPS3                           00000007
+SEVTCMPH                          00000F70
+SEVTCMPL                          00000F71
+SEVTDIR                           00000003
+SKIP_DLE                          1
+SMHOST                            00000000
+SMHOSTFLAGS                       00000000
+SMP                               00000007
+SPBRG                             00000FAF
+SPBRGH                            00000FB0
+SPEN                              00000007
+SREN                              00000005
+SS                                00000006
+SSPADD                            00000FC8
+SSPBUF                            00000FC9
+SSPCON                            00000FC6
+SSPEN                             00000005
+SSPIE                             00000003
+SSPIF                             00000003
+SSPIP                             00000003
+SSPM0                             00000000
+SSPM1                             00000001
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 27
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+SSPM2                             00000002
+SSPM3                             00000003
+SSPOV                             00000006
+SSPSTAT                           00000FC7
+SSRC0                             00000000
+SSRC1                             00000001
+SSRC2                             00000002
+SSRC3                             00000003
+SSRC4                             00000004
+STATUS                            00000FD8
+STKFUL                            00000007
+STKOVF                            00000007
+STKPTR                            00000FFC
+STKPTR0                           00000000
+STKPTR1                           00000001
+STKPTR2                           00000002
+STKPTR3                           00000003
+STKPTR4                           00000004
+STKUNF                            00000006
+STX                               0X02
+SW2                               0X02
+SW3                               0X00
+SWDTEN                            00000000
+SYNC                              00000004
+SYSTEM_PARAMETER_COUNT            0X2C
+T016BIT                           00000006
+T0CKI                             00000003
+T0CON                             00000FD5
+T0CS                              00000005
+T0IE                              00000005
+T0IF                              00000002
+T0IP                              00000002
+T0PS0                             00000000
+T0PS1                             00000001
+T0PS2                             00000002
+T0PS3                             00000003
+T0SE                              00000004
+T13CKI                            00000000
+T1CKPS0                           00000004
+T1CKPS1                           00000005
+T1CON                             00000FCD
+T1INSYNC                          00000002
+T1OSCEN                           00000003
+T1OSI                             00000001
+T1OSO                             00000000
+T1RUN                             00000006
+T1SYNC                            00000002
+T2CKPS0                           00000000
+T2CKPS1                           00000001
+T2CON                             00000FCA
+T2OUTPS0                          00000003
+T2OUTPS1                          00000004
+T2OUTPS2                          00000005
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 28
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+T2OUTPS3                          00000006
+T5CKI                             00000003
+T5CON                             00000FB7
+T5MOD                             00000005
+T5PS0                             00000003
+T5PS1                             00000004
+T5SEN                             00000007
+T5SYNC                            00000002
+TABLAT                            00000FF5
+TBIE                              00000004
+TBIF                              00000004
+TBIP                              00000004
+TBLPTR                            00000FF6
+TBLPTRH                           00000FF7
+TBLPTRL                           00000FF6
+TBLPTRU                           00000FF8
+TEMP1                             00000000
+TEMP2                             00000000
+TEMP3                             00000000
+TEMP4                             00000000
+TEMP5                             00000000
+TEMPHOSTDATALEN                   00000000
+TEMP_LAST_ADC                     00000000
+TEMP_SPEED_RPS                    00000000
+TMR0H                             00000FD7
+TMR0IE                            00000005
+TMR0IF                            00000002
+TMR0IP                            00000002
+TMR0L                             00000FD6
+TMR0ON                            00000007
+TMR1CS                            00000001
+TMR1H                             00000FCF
+TMR1H_COUNT                       0XF3
+TMR1IE                            00000000
+TMR1IF                            00000000
+TMR1IP                            00000000
+TMR1L                             00000FCE
+TMR1L_COUNT                       0XCB
+TMR1ON                            00000000
+TMR1_OF                           6
+TMR1_OF_COUNT_LSB                 00000000
+TMR1_OF_COUNT_MSB                 00000000
+TMR2                              00000FCC
+TMR2IE                            00000001
+TMR2IF                            00000001
+TMR2IP                            00000001
+TMR2ON                            00000002
+TMR5CS                            00000001
+TMR5H                             00000F88
+TMR5IE                            00000000
+TMR5IF                            00000000
+TMR5IP                            00000000
+TMR5L                             00000F87
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 29
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+TMR5ON                            00000000
+TO                                00000003
+TOS                               00000FFD
+TOSH                              00000FFE
+TOSL                              00000FFD
+TOSU                              00000FFF
+TRANSFERRESPONSEDATA              00000066
+TRANSFERRXDATA                    0000000A
+TRISA                             00000F92
+TRISA0                            00000000
+TRISA1                            00000001
+TRISA2                            00000002
+TRISA3                            00000003
+TRISA4                            00000004
+TRISA6                            00000006
+TRISA7                            00000007
+TRISB                             00000F93
+TRISB0                            00000000
+TRISB1                            00000001
+TRISB2                            00000002
+TRISB3                            00000003
+TRISB4                            00000004
+TRISB5                            00000005
+TRISB6                            00000006
+TRISB7                            00000007
+TRISC                             00000F94
+TRISC0                            00000000
+TRISC1                            00000001
+TRISC2                            00000002
+TRISC3                            00000003
+TRISC4                            00000004
+TRISC5                            00000005
+TRISC6                            00000006
+TRISC7                            00000007
+TRISC_VALUE                       b'11000111'
+TRMT                              00000001
+TUN0                              00000000
+TUN1                              00000001
+TUN2                              00000002
+TUN3                              00000003
+TUN4                              00000004
+TUN5                              00000005
+TX                                00000006
+TX9                               00000006
+TX9D                              00000000
+TXBUFNOTFULL                      000000F4
+TXEN                              00000005
+TXIE                              00000004
+TXIF                              00000004
+TXIP                              00000004
+TXREG                             00000FAD
+TXSTA                             00000FAC
+UA                                00000001
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 30
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+UARTINT_GETCH                     000000F8
+UARTINT_PUTCH                     000000B8
+UARTINT_RX_BUFFER                 00000000
+UARTINT_RX_BUFFER_SIZE            0X20
+UARTINT_RX_BUF_DATACNT            00000000
+UARTINT_RX_BUF_EMPTY              2
+UARTINT_RX_BUF_FUL                1
+UARTINT_RX_BUF_OF                 4
+UARTINT_RX_BUF_RDPTR              00000000
+UARTINT_RX_BUF_WRPTR              00000000
+UARTINT_RX_ERROR                  3
+UARTINT_STATUS                    00000000
+UARTINT_TX_BUFFER                 00000000
+UARTINT_TX_BUFFER_SIZE            0X20
+UARTINT_TX_BUF_DATACNT            00000000
+UARTINT_TX_BUF_FUL                0
+UARTINT_TX_BUF_RDPTR              00000000
+UARTINT_TX_BUF_WRPTR              00000000
+UDIS                              00000001
+UP                                00000005
+UP_DOWN                           00000005
+USARTBYTE                         00000000
+VALID_HALL                        6
+VCFG0                             00000006
+VCFG1                             00000007
+VELM                              00000007
+VELOCITY_READY                    3
+VELRH                             00000F69
+VELRL                             00000F68
+VREFM                             00000002
+VREFP                             00000003
+W                                 00000000
+WCOL                              00000007
+WDT0                              00000001
+WDT1                              00000002
+WDT2                              00000003
+WDT3                              00000004
+WDT4                              00000005
+WDT5                              00000006
+WDT6                              00000007
+WDTCON                            00000FD1
+WDTW                              00000007
+WR                                00000001
+WREG                              00000FE8
+WREN                              00000002
+WRERR                             00000003
+WUE                               00000001
+Z                                 00000002
+_BOREN_OFF_2L                     000000FD
+_BOREN_ON_2L                      000000FF
+_BORV_20_2L                       000000FF
+_BORV_27_2L                       000000FB
+_BORV_42_2L                       000000F7
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 31
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_BORV_45_2L                       000000F3
+_CONFIG1H                         00300001
+_CONFIG2H                         00300003
+_CONFIG2L                         00300002
+_CONFIG3H                         00300005
+_CONFIG3L                         00300004
+_CONFIG4L                         00300006
+_CONFIG5H                         00300009
+_CONFIG5L                         00300008
+_CONFIG6H                         0030000B
+_CONFIG6L                         0030000A
+_CONFIG7H                         0030000D
+_CONFIG7L                         0030000C
+_CP0_OFF_5L                       000000FF
+_CP0_ON_5L                        000000FE
+_CP1_OFF_5L                       000000FF
+_CP1_ON_5L                        000000FD
+_CP2_OFF_5L                       000000FF
+_CP2_ON_5L                        000000FB
+_CP3_OFF_5L                       000000FF
+_CP3_ON_5L                        000000F7
+_CPB_OFF_5H                       000000FF
+_CPB_ON_5H                        000000BF
+_CPD_OFF_5H                       000000FF
+_CPD_ON_5H                        0000007F
+_DEBUG_OFF_4L                     000000FF
+_DEBUG_ON_4L                      0000007F
+_DEVID1                           003FFFFE
+_DEVID2                           003FFFFF
+_EBTR0_OFF_7L                     000000FF
+_EBTR0_ON_7L                      000000FE
+_EBTR1_OFF_7L                     000000FF
+_EBTR1_ON_7L                      000000FD
+_EBTRB_OFF_7H                     000000FF
+_EBTRB_ON_7H                      000000BF
+_FCMEN_OFF_1H                     000000BF
+_FCMEN_ON_1H                      000000FF
+_HPOL_HIGH_3L                     000000FF
+_HPOL_LOW_3L                      000000EF
+_IDLOC0                           00200000
+_IDLOC1                           00200001
+_IDLOC2                           00200002
+_IDLOC3                           00200003
+_IDLOC4                           00200004
+_IDLOC5                           00200005
+_IDLOC6                           00200006
+_IDLOC7                           00200007
+_IESO_OFF_1H                      0000007F
+_IESO_ON_1H                       000000FF
+_LPOL_HIGH_3L                     000000FF
+_LPOL_LOW_3L                      000000F7
+_LVP_OFF_4L                       000000FB
+_LVP_ON_4L                        000000FF
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 32
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_MCLRE_OFF_3H                     0000007F
+_MCLRE_ON_3H                      000000FF
+_OSC_ECIO_1H                      000000F5
+_OSC_EC_1H                        000000F4
+_OSC_HSPLL_1H                     000000F6
+_OSC_HS_1H                        000000F2
+_OSC_IRCIO_1H                     000000F8
+_OSC_IRC_1H                       000000F9
+_OSC_LP_1H                        000000F0
+_OSC_RC1_1H                       000000FB
+_OSC_RC2_1H                       000000F3
+_OSC_RCIO_1H                      000000F7
+_OSC_RC_1H                        000000FF
+_OSC_XT_1H                        000000F1
+_PWMPIN_OFF_3L                    000000FF
+_PWMPIN_ON_3L                     000000FB
+_PWRTEN_OFF_2L                    000000FF
+_PWRTEN_ON_2L                     000000FE
+_STVREN_OFF_4L                    000000FE
+_STVREN_ON_4L                     000000FF
+_T1OSCMX_OFF_3L                   000000DF
+_T1OSCMX_ON_3L                    000000FF
+_WDPS_1024_2H                     000000F5
+_WDPS_128_2H                      000000EF
+_WDPS_16384_2H                    000000FD
+_WDPS_16_2H                       000000E9
+_WDPS_1_2H                        000000E1
+_WDPS_2048_2H                     000000F7
+_WDPS_256_2H                      000000F1
+_WDPS_2_2H                        000000E3
+_WDPS_32768_2H                    000000FF
+_WDPS_32_2H                       000000EB
+_WDPS_4096_2H                     000000F9
+_WDPS_4_2H                        000000E5
+_WDPS_512_2H                      000000F3
+_WDPS_64_2H                       000000ED
+_WDPS_8192_2H                     000000FB
+_WDPS_8_2H                        000000E7
+_WDTEN_OFF_2H                     000000FE
+_WDTEN_ON_2H                      000000FF
+_WINEN_OFF_2H                     000000FF
+_WINEN_ON_2H                      000000DF
+_WRT0_OFF_6L                      000000FF
+_WRT0_ON_6L                       000000FE
+_WRT1_OFF_6L                      000000FF
+_WRT1_ON_6L                       000000FD
+_WRTB_OFF_6H                      000000FF
+_WRTB_ON_6H                       000000BF
+_WRTC_OFF_6H                      000000FF
+_WRTC_ON_6H                       000000DF
+_WRTD_OFF_6H                      000000FF
+_WRTD_ON_6H                       0000007F
+__18F2431                         00000001
+MPASM  5.37                    BLDCBUFFER.ASM   11-10-2010  10:53:50         PAGE 33
+
+
+
+
+
+
+Errors   :     0
+Warnings :     0 reported,     0 suppressed
+Messages :     0 reported,     0 suppressed
+
+

@@ -125,7 +125,7 @@ public:
 		encoder.position = p;
 	}
 #endif
-private:
+public:
 	Encoder_internal_state_t encoder;
 #ifdef ENCODER_USE_INTERRUPTS
 	uint8_t interrupts_in_use;
@@ -180,7 +180,7 @@ public:
 	}
 */
 
-private:
+public:
 	static void update(Encoder_internal_state_t *arg) {
 #if defined(__AVR__)
 		// The compiler believes this is just 1 line of code, so

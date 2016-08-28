@@ -24,6 +24,7 @@ const int bPin = 3; // interrupt 2 Port PD0
 const int pwmForward = 9;
 const int pwmBackward = 10;
 
-const int buzzerPin = 45; 
+const int buzzerPin = A1;
+const int buzzerGroundPin = A2; 
 
 

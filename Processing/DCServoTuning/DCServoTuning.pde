@@ -18,13 +18,15 @@ Toggle sendPos;
 boolean supressSerialSend;
 float KiValue = 0;
 float kdScale = 100;
-FloatList errors; 
+FloatList errors, targetPositions, positions; 
 
 void setup() {
     size(800, 600);
     smooth();
     noStroke();
  errors = new FloatList(); 
+ positions = new FloatList(); 
+ targetPositions = new FloatList(); 
     cp5 = new ControlP5(this);
 
     knobKp = cp5.addSlider("P")
@@ -110,7 +112,13 @@ void draw() {
                         float target = values[1]; 
                         float error = target-pos; 
                         errors.append(error); 
+                        positions.append(pos); 
+                        targetPositions.append(target); 
                         if(errors.size()>width-10) errors.remove(0); 
+                        if(positions.size()>width-10) positions.remove(0); 
+                        if(targetPositions.size()>width-10) targetPositions.remove(0); 
+                        
+                        
                     }
                 }
             }
@@ -126,6 +134,23 @@ void draw() {
         
     }
     endShape(); 
+    
+    stroke(0,255,0); 
+    beginShape(); 
+    for(int i =0; i<targetPositions.size(); i++) { 
+        vertex(i, ((targetPositions.get(i)/1.0f)%600) ); 
+        
+    }
+    endShape(); 
+    
+   stroke(255,0,0); 
+    beginShape(); 
+    for(int i =0; i<positions.size(); i++) { 
+        vertex(i,  ((positions.get(i)/1.0f)%600) ); 
+        
+    }
+    endShape(); 
+    
     noStroke(); 
 }
 
